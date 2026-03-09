@@ -7,10 +7,10 @@ covering all stages from raw HILDA+ processing through wetland/peatland integrat
 
 | Stage | Package / Directory | Description |
 |-------|---------------------|-------------|
-| 1 | `hildaplus/` | HILDA+ smoothing, upscaling, and chain processing (standalone scripts) |
-| 2 | `landsymm.remapping` | Baseline land-use construction from HILDA+ NetCDF → half-degree tables |
-| 3 | `landsymm.harmonization` | PLUM scenario harmonization + conversion to LPJ-GUESS inputs |
-| 4 | `landsymm.wetlands` | GLWD3 wetland/peatland integration into land-use data |
+| 1 | `hildaplus/` | HILDA+ smoothing, upscaling, and chain processing (modified from Martin Winterbrink implementation) |
+| 2 | `landsymm.remapping` | Baseline land-use construction from HILDA+ NetCDF → half-degree tables (modified from Sam Rabin LUH2 implementation) |
+| 3 | `landsymm.harmonization` | PLUM scenario harmonization + conversion to LPJ-GUESS inputs (modified from Sam Rabin LUH2 implementation) |
+| 4 | `landsymm.wetlands` | GLWD3 wetland/peatland integration into land-use data (modified from Peter Anthoni implementation) |
 
 Shared utilities live in `landsymm.common`.
 
