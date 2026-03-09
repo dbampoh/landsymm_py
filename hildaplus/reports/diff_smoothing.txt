@@ -1,0 +1,242 @@
+--- scripts/hilda_smoothing/smoothingscript_run.py	2023-03-09 18:36:12.000000000 +0100
++++ scripts/hilda_smoothing/smoothing_local.py	2026-01-15 18:39:40.582145582 +0100
+@@ -1,45 +1,205 @@
++#!/usr/bin/env python3
++"""
++Local version of HILDA+ smoothing script
++Optimized for single machine processing
++"""
++
+ import numpy as np
+ import netCDF4 as nc
+ from scipy import ndimage as nd
+-import joblib
+-from joblib import Parallel, delayed
++import os
++import sys
++from datetime import datetime
++
++# Configuration
++# Local-friendly defaults: sequential processing with configurable chunk sizes.
++# The original script hardcodes cluster paths and writes per-slice .npz files.
++SIGMA = 3.0  # Gaussian filter sigma value
++CHUNK_SIZE = 1000  # Process this many longitude pixels at a time
++OUTPUT_DIR = './smoothed_output/'  # Where to save output
++
++
++def hildafomafusion(hildastates, hildafoma):
++    """Merge HILDA+ LULC states with forest management data.
++    Pixels where forest management is true are multiplied by 10.
++    """
++    return hildastates * (np.ones_like(hildafoma) + (hildafoma == 1) * 9)
++
++
++def reduce_flickering_gaussian_1pixel(slice1, sigma=3.0):
++    """Apply Gaussian filtering to reduce flickering in time series."""
++    uniq = np.unique(slice1, return_inverse=True)
++    if len(uniq[0]) > 1:  # Only process if more than 1 unique value
++        # Create separate timeseries for all LULC classes
++        u = [uniq[1] == i for i in range(len(uniq[0]))]
++        # Apply Gaussian filtering
++        gf = [nd.gaussian_filter(ui.astype(float), sigma, mode='constant', cval=0) for ui in u]
++        # Reconstruct timeseries with maximum categories
++        imax = np.argmax(gf, axis=0)
++        newslice = slice1.copy()
++        for i in range(len(uniq[0])):
++            newslice[imax == i] = uniq[0][i]
++        return newslice
++    else:
++        return slice1
+ 
+ 
+-def hildafomafusion(hildastates,hildafoma):				# function to merge the hilda+ LULC states and the forest management data into one dataset
+-    return hildastates*(np.ones_like(hildafoma)+(hildafoma==1)*9)     	# pixels where forest management is true are mulitplied by 10
++def apply_gaussian_3times(slice1, sigma=3.0):
++    """Apply Gaussian filtering three times (as per original)."""
++    for _ in range(3):
++        slice1 = reduce_flickering_gaussian_1pixel(slice1, sigma)
++    return slice1
+ 
+ 
+-def reduce_flickering_gaussian_1pixel(slice1,sigma=3.0):
+-    uniq=np.unique(slice1,return_inverse=True)    			# get different values in timeseries
+-    if len(uniq[0])>1:                            			# only continue, if more than 1 value (to save computing time)
+-        u=[uniq[1]==i for i in range(len(uniq[0]))]			# creates sepaarate timeseries for all LULC classes in pixel
+-        gf=[nd.gaussian_filter(ui.astype(float),sigma,mode='constant',cval=0) for ui in u]		# gaussian filtering
+-        imax=np.argmax(gf,axis=0)					# now construct a new timeseries maximum categories from gaussian filtering
+-        newslice=slice1.copy()
+-        for i in range(len(uniq[0])):
+-            newslice[imax==i]=uniq[0][i]
+-        return newslice
++def smooth_hilda_data(hildastates_file, hildafoma_file=None, output_file='hildaplus_smoothed.nc',
++                      chunk_size=CHUNK_SIZE, progress_interval=100):
++    """
++    Main smoothing function for local processing.
++    
++    Parameters:
++    -----------
++    hildastates_file : str
++        Path to HILDA+ states NetCDF file
++    hildafoma_file : str or None
++        Path to forest management NetCDF file (optional)
++    output_file : str
++        Path for output smoothed NetCDF file
++    chunk_size : int
++        Number of longitude pixels to process at once
++    progress_interval : int
++        Report progress every N longitude chunks
++    """
++    
++    print(f"Opening HILDA+ states file: {hildastates_file}")
++    ds_states = nc.Dataset(hildastates_file, 'r')
++    
++    # Get dimensions
++    time_dim = len(ds_states.dimensions['time'])
++    lat_dim = len(ds_states.dimensions['latitude'])
++    lon_dim = len(ds_states.dimensions['longitude'])
++    
++    print(f"Dataset dimensions: time={time_dim}, lat={lat_dim}, lon={lon_dim}")
++    
++    # Get coordinate variables
++    times = ds_states.variables['time'][:]
++    lats = ds_states.variables['latitude'][:]
++    lons = ds_states.variables['longitude'][:]
++    
++    # Handle forest management data if provided (separate FM file).
++    if hildafoma_file:
++        print(f"Opening forest management file: {hildafoma_file}")
++        ds_foma = nc.Dataset(hildafoma_file, 'r')
+     else:
+-        return slice1
++        print("No forest management file provided, proceeding without it")
++        ds_foma = None
++    
++    # Create output NetCDF
++    print(f"Creating output file: {output_file}")
++    ds_out = nc.Dataset(output_file, 'w', format='NETCDF4')
+     
+-def apply_gaussian_3times(slice1,sigma=3.0):				# apparently applying it once isn't enough
+-    return reduce_flickering_gaussian_1pixel(reduce_flickering_gaussian_1pixel(reduce_flickering_gaussian_1pixel(slice1,sigma),sigma),sigma)
++    # Create dimensions
++    ds_out.createDimension('time', time_dim)
++    ds_out.createDimension('latitude', lat_dim)
++    ds_out.createDimension('longitude', lon_dim)
++    
++    # Create coordinate variables
++    time_var = ds_out.createVariable('time', 'i4', ('time',))
++    lat_var = ds_out.createVariable('latitude', 'f4', ('latitude',))
++    lon_var = ds_out.createVariable('longitude', 'f4', ('longitude',))
++    
++    # Copy coordinate data
++    time_var[:] = times
++    lat_var[:] = lats
++    lon_var[:] = lons
++    
++    # Copy attributes
++    for attr in ds_states.variables['time'].ncattrs():
++        time_var.setncattr(attr, ds_states.variables['time'].getncattr(attr))
++    for attr in ds_states.variables['latitude'].ncattrs():
++        lat_var.setncattr(attr, ds_states.variables['latitude'].getncattr(attr))
++    for attr in ds_states.variables['longitude'].ncattrs():
++        lon_var.setncattr(attr, ds_states.variables['longitude'].getncattr(attr))
++    
++    # Create output variable
++    lulc_var = ds_out.createVariable('LULC_states', 'u2', ('time', 'latitude', 'longitude'),
++                                     zlib=True, complevel=4, chunksizes=(time_dim, 100, 100))
++    lulc_var.setncattr('description', 'Smoothed HILDA+ land use/land cover states')
++    lulc_var.setncattr('smoothing_method', 'Triple Gaussian filter with sigma=3.0')
++    
++    # Process in chunks to manage memory (single-machine friendly).
++    n_chunks = (lon_dim + chunk_size - 1) // chunk_size
++    print(f"\nProcessing {n_chunks} longitude chunks of size {chunk_size}")
++    
++    start_time = datetime.now()
++    
++    for chunk_idx in range(n_chunks):
++        lon_start = chunk_idx * chunk_size
++        lon_end = min((chunk_idx + 1) * chunk_size, lon_dim)
++        
++        if chunk_idx % progress_interval == 0:
++            elapsed = (datetime.now() - start_time).total_seconds()
++            percent = (chunk_idx / n_chunks) * 100
++            print(f"Processing chunk {chunk_idx}/{n_chunks} ({percent:.1f}%) - Elapsed: {elapsed:.1f}s")
++        
++        # Read chunk data
++        states_chunk = ds_states.variables['LULC_states'][:, :, lon_start:lon_end]
++        
++        if ds_foma:
++            foma_chunk = ds_foma.variables['forest_management'][:, :, lon_start:lon_end]
++            # Merge states with forest management
++            data_chunk = hildafomafusion(states_chunk, foma_chunk)
++        else:
++            data_chunk = states_chunk
++        
++        # Apply smoothing to each pixel in the chunk (no parallelism here).
++        smoothed_chunk = np.zeros_like(data_chunk)
++        
++        for i in range(data_chunk.shape[1]):  # latitude
++            for j in range(data_chunk.shape[2]):  # longitude (within chunk)
++                pixel_timeseries = data_chunk[:, i, j]
++                smoothed_chunk[:, i, j] = apply_gaussian_3times(pixel_timeseries, SIGMA)
++        
++        # Write smoothed chunk to output
++        lulc_var[:, :, lon_start:lon_end] = smoothed_chunk
++    
++    # Add global attributes
++    ds_out.setncattr('title', 'Smoothed HILDA+ Land Use/Land Cover Dataset')
++    ds_out.setncattr('source', f'Smoothed from: {os.path.basename(hildastates_file)}')
++    ds_out.setncattr('history', f'Created on {datetime.now().isoformat()}')
++    ds_out.setncattr('smoothing_sigma', SIGMA)
++    
++    # Close files
++    ds_states.close()
++    if ds_foma:
++        ds_foma.close()
++    ds_out.close()
++    
++    total_time = (datetime.now() - start_time).total_seconds()
++    print(f"\nSmoothing completed in {total_time:.1f} seconds")
++    print(f"Output saved to: {output_file}")
+ 
+-def runlonslice(hdata):							# run the smoothing for a given block of Hilda+ data
+-    return [[apply_gaussian_3times(hdata[:,i,j]) for i in range(hdata.shape[1])] for j in range(hdata.shape[2])]
+ 
+-def run_it(i_slice):							# collect the data and run the smoothing for a dataset of 121x18000x100 pixels (years x latitude x longitude, 1/360 of the whole global data)
+-    # i_slice is an index running from 0 to 359 in order to cut the global process into 360 parallelizable processes
+-    hildastatesfile='/pd/data/lpj/input_data/Hilda/Hildaplus_vGLOB-2.0/hildap_vGLOB-2.0-forest_netcdf/hildaplus_GLOB-2-0-f_states.nc'
+-    hildafomafile='/pd/data/lpj/input_data/Hilda/Hildaplus_vGLOB-2.0/hildap_vGLOB-2.0-forest_netcdf/hildaplus_GLOB-2-0-f_forest-management.nc'
+-    hstates=nc.Dataset(hildastatesfile,'r')
+-    hfoma=nc.Dataset(hildafomafile,'r')
+-    hstatesdata=hstates['LULC_states'][:,:,i_slice*100:(i_slice*100+100)].data
+-    hfomadata=hfoma['forest_management'][:,:,i_slice*100:(i_slice*100+100)].data
+-    hildadata=hildafomafusion(hstatesdata,hfomadata)
+-    slicedata=runlonslice(hildadata)
+-    np.savez_compressed('/pd/data/lpj/wittenbrink-m/smoothing/slice_npys/slice_'+str(i_slice)+'.npz', a=slicedata)  # save the smoothed data as a compressed npy file
+-    return
++def main():
++    """Main entry point."""
++    if len(sys.argv) < 2:
++        print("Usage: python smoothing_local.py <hildastates.nc> [hildafoma.nc] [output.nc]")
++        print("\nExample:")
++        print("  python smoothing_local.py states.nc forest_mgmt.nc smoothed.nc")
++        print("  python smoothing_local.py states.nc  # No forest management")
++        sys.exit(1)
++    
++    hildastates_file = sys.argv[1]
++    hildafoma_file = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].endswith('.nc') else None
++    
++    # Determine output file
++    if len(sys.argv) > 2 and sys.argv[-1].endswith('.nc'):
++        output_file = sys.argv[-1]
++    else:
++        output_file = 'hildaplus_smoothed.nc'
++    
++    # Run smoothing
++    smooth_hilda_data(hildastates_file, hildafoma_file, output_file)
++
+ 
+-Parallel(n_jobs=20)([delayed(run_it)(i) for i in range(360)])		# run it in parallel 
+-                                  
++if __name__ == '__main__':
++    main()
+\ No newline at end of file

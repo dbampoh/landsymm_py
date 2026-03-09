@@ -1,0 +1,11 @@
+*.out
+*.out.gz
+*.nc
+*.nc4
+*.tgz
+*.zip
+*.7z
+.svn/
+data/
+results/
+src/

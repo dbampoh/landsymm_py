@@ -1,0 +1,6 @@
+- The upscaling script requires:
+
+    - Python 3.7 or higher
+    - Numpy
+    - netCDF4
+
