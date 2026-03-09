@@ -1,7 +1,27 @@
 # LandSyMM Python Pipeline (`landsymm_py`)
 
-Self-contained Python implementation of the **Land System Modular Model** pipeline,
-covering all stages from raw HILDA+ processing through wetland/peatland integration.
+Self-contained Python implementation of the land-use pipeline for the
+**Land System Modular Model (LandSyMM)**, covering all stages from raw
+HILDA+ processing through baseline remapping, harmonization with PLUM
+scenarios, and wetland/peatland integration.
+
+The pipeline constructs spatially explicit land-use forcing data for the
+LPJ-GUESS dynamic global vegetation model. It bridges the gap between
+historically observed land-use patterns (from the HILDA+ dataset at 1 km
+resolution) and future land-use projections (from the PLUM land-use model)
+by producing gridded inputs that transition seamlessly from the historical
+period into scenario-driven futures. At each stage, multiple heterogeneous
+data sources — HILDA+ land-use fractions, MIRCA2000 crop-specific harvested
+areas, AgGRID nitrogen fertilization application rates, and GLWD3 wetland
+extents — are reconciled onto a common half-degree grid with consistent
+land-use class definitions. The harmonization stage ensures that the
+transition from observed baseline to projected scenario is spatially
+conservative (total land area is preserved) and temporally smooth (no
+discontinuities at the historical-to-future boundary), while respecting
+constraints such as protected area fractions and minimum natural vegetation
+rates. The final outputs are ready-to-use LPJ-GUESS input files — land cover
+fractions, crop type allocations, nitrogen fertilization, and irrigation —
+spanning both historical and future periods under multiple SSP-RCP scenarios.
 
 ## Pipeline Stages
 
