@@ -155,7 +155,10 @@ def run_remap(cfg: RemapConfig) -> None:
     if cfg.lu_source == "LUH2":
         out_lu, carea_yx = import_lu_luh2(cfg.geodata_dir, cfg.year_list_out, gridlist)
     elif cfg.lu_source == "HILDA+":
-        out_lu, carea_yx = import_lu_hildaplus(cfg.geodata_dir, cfg.year_list_out, gridlist)
+        out_lu, carea_yx = import_lu_hildaplus(
+            cfg.geodata_dir, cfg.year_list_out, gridlist,
+            max_nan_frac=cfg.max_nan_frac,
+        )
     else:
         raise RuntimeError(f"lu_source {cfg.lu_source} not recognized")
 

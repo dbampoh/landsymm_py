@@ -242,6 +242,7 @@ python -m landsymm.remapping.run_remap
 | `inpaint_method` | 4 | Spring-analogy NaN filling |
 | `plum_setaside_frac` | 0.088 | PLUM set-aside fraction |
 | `fill_unveg` | 1e-6 | Fraction transferred to NATURAL at barren cells |
+| `max_nan_frac` | 0.01 | Max fraction of gridlist cells allowed without HILDA+ data |
 | `remap_ver` | "10_old_62892_gL" | Version tag for output filenames |
 
 ### Dependencies

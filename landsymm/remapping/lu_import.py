@@ -38,7 +38,10 @@ from landsymm.common.mapping_tools import yxz_to_xz
 
 
 def import_lu_hildaplus(
-    geodata_dir: str, year_list_out: Sequence[int], gridlist: GeoArray
+    geodata_dir: str,
+    year_list_out: Sequence[int],
+    gridlist: GeoArray,
+    max_nan_frac: float = 0.01,
 ) -> Tuple[GeoArray, np.ndarray]:
     """Import HILDA+ netfrac and map to LU classes (TODO).
 
@@ -105,10 +108,28 @@ def import_lu_hildaplus(
         raise RuntimeError("Some member of map_LU_in2out is not present in list_LU_out!")
     print("Warning: Should work out specification of mapping with check for duplicates on LHS.")
 
-    if np.isnan(in_lu["garr_xvy"]).any():
-        raise RuntimeError("Handle NaNs in in_lu.garr_xvy")
-
+    nan_mask = np.any(np.any(np.isnan(in_lu["garr_xvy"]), axis=2), axis=1)
+    n_nan = int(np.sum(nan_mask))
     n_cells = len(gridlist["list2map"])
+    if n_nan:
+        nan_pct = n_nan / n_cells * 100
+        if n_nan / n_cells > max_nan_frac:
+            raise RuntimeError(
+                f"{n_nan} of {n_cells} gridlist cells ({nan_pct:.2f}%) have no HILDA+ data. "
+                f"This exceeds max_nan_frac={max_nan_frac:.0%}. "
+                "Check that hildaplus_netfrac_1901_2020.txt matches the target gridlist."
+            )
+        print(
+            f"  WARNING: {n_nan} of {n_cells} gridlist cells ({nan_pct:.2f}%) "
+            "have no corresponding HILDA+ data.\n"
+            "    Resolution: Setting these cells to BARREN=1.0; they will be\n"
+            "    handled by the fill_unveg setting downstream.\n"
+            "    Alternative: Ensure hildaplus_netfrac_1901_2020.txt covers all\n"
+            "    cells in the target gridlist, or regenerate the gridlist from\n"
+            "    the HILDA+ output."
+        )
+        in_lu["garr_xvy"][nan_mask, :, :] = 0.0
+
     n_years = len(year_list_out)
     out_lu = {k: v for k, v in in_lu.items() if k not in {"garr_xvy", "varNames"}}
     out_lu["varNames"] = list_lu_out
@@ -118,6 +139,11 @@ def import_lu_hildaplus(
         print(f"    {this_in} ({v+1} of {len(list_lu_in)}) to {this_out}...")
         i = list_lu_out.index(this_out)
         out_lu["garr_xvy"][:, i, :] += in_lu["garr_xvy"][:, v, :]
+
+    if n_nan:
+        i_bare = list_lu_out.index("BARREN")
+        out_lu["garr_xvy"][nan_mask, :, :] = 0.0
+        out_lu["garr_xvy"][nan_mask, i_bare, :] = 1.0
 
     if _max_sum_diff(out_lu["garr_xvy"], 1.0) > 1e-6:
         raise RuntimeError("Combining input LU types into output types: Changed sum of LU fractions")

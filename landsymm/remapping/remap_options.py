@@ -28,4 +28,5 @@ class RemapConfig:
     overwrite: bool = True
     fancy: bool = False
     do_gzip: bool = False
+    max_nan_frac: float = 0.01
     log_file: str | None = None

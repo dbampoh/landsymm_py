@@ -136,6 +136,7 @@ Configuration Reference (RemapConfig)
 - `lu_source`: `"HILDA+"` or `"LUH2"`
 - `out_dir_top`: output root directory
 - `fill_unveg`: fraction to transfer from BARREN to NATURAL in unvegetated cells
+- `max_nan_frac`: maximum fraction of gridlist cells allowed to have no HILDA+ data before erroring (default `0.01`). Cells below the threshold are set to BARREN=1.0 and handled by `fill_unveg`.
 - `interp_test_y1`, `interp_test_yN`: years for interpolation sanity checks
 - `inpaint_method`: method for inpainting (`4` = spring analogy)
 - `force_all_rainfed`: if true, merge irrigated into rainfed for crops
