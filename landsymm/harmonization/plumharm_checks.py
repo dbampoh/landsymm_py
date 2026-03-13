@@ -145,6 +145,7 @@ def check_bad_vals(
     lu_names,
     msg,
     out_prec,
+    allow_unveg: bool = False,
 ):
     """Mirror PLUMharm_checkBadVals.m."""
     if in_lu_yxv is not None:
@@ -168,7 +169,11 @@ def check_bad_vals(
             raise RuntimeError(
                 f"Sum(s) >1 in {msg} LU maps! Max overage {np.max(np.sum(in_lu_frac, axis=2)) - 1:0.1e}"
             )
-        if np.any(is_bare) and np.any((vegd_yx == 0) & (land_area_yx > 0)):
+        if (
+            not allow_unveg
+            and np.any(is_bare)
+            and np.any((vegd_yx == 0) & (land_area_yx > 0))
+        ):
             max_land = np.max(land_area_yx[vegd_yx == 0])
             tot_land = np.sum(land_area_yx[vegd_yx == 0])
             raise RuntimeError(

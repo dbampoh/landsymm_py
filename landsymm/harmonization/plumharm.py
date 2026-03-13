@@ -306,6 +306,7 @@ def run_plumharm(cfg: PlumHarmConfig) -> None:
                     lu_names,
                     "in_y0",
                     cfg.out_prec,
+                    allow_unveg=cfg.allow_unveg,
                 )
 
             file_in = os.path.join(plum_dir, str(this_year), "LandCoverFract.txt")
@@ -344,6 +345,7 @@ def run_plumharm(cfg: PlumHarmConfig) -> None:
                 lu_names,
                 "in_y1",
                 cfg.out_prec,
+                allow_unveg=cfg.allow_unveg,
             )
 
             in_y0_agri = _align_maps_by_names(
@@ -455,6 +457,7 @@ def run_plumharm(cfg: PlumHarmConfig) -> None:
                 lu_names,
                 "in_y0.2",
                 cfg.out_prec,
+                allow_unveg=cfg.allow_unveg,
             )
             check_bad_vals(
                 in_y1["maps_YXv"],
@@ -464,6 +467,7 @@ def run_plumharm(cfg: PlumHarmConfig) -> None:
                 lu_names,
                 "in_y1.2",
                 cfg.out_prec,
+                allow_unveg=cfg.allow_unveg,
             )
             if cfg.debug_areas and cfg.debugIJ_2deg is not None:
                 debug_out_deltas(
@@ -502,6 +506,7 @@ def run_plumharm(cfg: PlumHarmConfig) -> None:
                     cfg.conserv_tol_area,
                     cfg.debugIJ_2deg,
                     cfg.dbCrop,
+                    allow_unveg=cfg.allow_unveg,
                 )
             except RuntimeError as exc:
                 msg = str(exc)
@@ -665,6 +670,7 @@ def run_plumharm(cfg: PlumHarmConfig) -> None:
                 lu_names,
                 "out_y1",
                 cfg.out_prec,
+                allow_unveg=cfg.allow_unveg,
             )
 
             out_y1_nfert = None

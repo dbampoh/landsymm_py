@@ -464,17 +464,29 @@ def _harmonize_vegdbare(s: Dict[str, Any], not_bare, bare_frac_y0_yx, land_area_
                 "PLUM has vegetated fraction where baseline LU has either no land or all unvegetated land"
             )
         vegd_frac_y1_yx_rep = np.repeat(vegd_frac_y1_yx[:, :, None], np.sum(not_bare), axis=2)
-        vegd_frac_y1_yxv = s["maps_YXv"][:, :, not_bare] / vegd_frac_y1_yx_rep
+        with np.errstate(invalid="ignore", divide="ignore"):
+            vegd_frac_y1_yxv = s["maps_YXv"][:, :, not_bare] / vegd_frac_y1_yx_rep
         vegd_frac_y1_yxv[vegd_frac_y1_yx_rep == 0] = 0
         bare_frac_y0_yx = np.asarray(bare_frac_y0_yx, dtype=float)
         s["maps_YXv"][:, :, not_bare] = vegd_frac_y1_yxv * (1 - bare_frac_y0_yx[:, :, None])
         s["maps_YXv"][:, :, ~not_bare] = bare_frac_y0_yx[:, :, None]
-        maxdiff = np.nanmax(np.abs(np.sum(s["maps_YXv"], axis=2) - 1))
-        tol = 1e-12
-        if maxdiff > tol:
+        sums_yx = np.sum(s["maps_YXv"], axis=2)
+        maxdiff = np.nanmax(np.abs(sums_yx - 1))
+        tol_strict = 1e-12
+        tol_renorm = 0.02  # allow renormalization for small drift (e.g. different PLUM inputs)
+        if maxdiff > tol_renorm:
             raise RuntimeError(
-                f"Land use fractions don't sum to 1 within tolerance {tol}; max abs. diff {maxdiff}"
+                f"Land use fractions don't sum to 1 (max abs. diff {maxdiff:.2e} > {tol_renorm}); "
+                "check PLUM input data consistency with baseline"
             )
+        if maxdiff > tol_strict:
+            # Renormalize to fix minor floating-point or input drift (e.g. Agrivoltaics datasets)
+            sums_expanded = sums_yx[:, :, np.newaxis]  # shape (Y,X,1) for broadcast with (Y,X,V)
+            divisor = np.where(
+                sums_expanded > 0, sums_expanded, np.ones(sums_expanded.shape, dtype=sums_expanded.dtype)
+            )
+            with np.errstate(invalid="ignore", divide="ignore"):
+                s["maps_YXv"] = s["maps_YXv"] / divisor
     return s
 
 

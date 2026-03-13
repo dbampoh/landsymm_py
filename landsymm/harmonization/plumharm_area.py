@@ -13,6 +13,7 @@ from .plumharm_ring_redist import ring_redistribute_area
 
 def harmonize_area(*args, **kwargs):
     """Harmonize land-use area changes (PLUMharm.m area section)."""
+    allow_unveg = kwargs.get("allow_unveg", False)
     (
         in_y0_2deg_agri_yxv,
         in_y1_2deg_agri_yxv,
@@ -250,6 +251,7 @@ def harmonize_area(*args, **kwargs):
         lu_names,
         "out_y1_2deg",
         6,
+        allow_unveg=allow_unveg,
     )
 
     check_area_conservation(
