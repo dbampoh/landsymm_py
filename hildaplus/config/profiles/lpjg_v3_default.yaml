@@ -1,0 +1,77 @@
+# Profile: lpjg_v3_default
+# Mirrors the active default config (lpjg_landcover_mapping.yaml).
+# Use via:  --mapping-profile lpjg_v3_default
+#           or LANDSYMM_LANDCOVER_PROFILE=lpjg_v3_default
+#
+# This profile exists so users can request "the v3 default" explicitly
+# in scripts/notebooks, even when the on-disk default is later changed.
+
+profile:
+  name: "lpjg_v3_default"
+  description: >
+    Active v3 pipeline mapping. Sparse/barren (HILDA+ 66) is treated as NATURAL.
+    CROPLAND includes annual crops (22), tree crops (23), and agroforestry (24).
+    BARREN includes ocean (0), water (77), and no-data (99) only.
+  source: "HILDA+ v2"
+  source_reference: "Winkler et al. (2021) Earth Syst. Sci. Data 13:1119-1148"
+
+hilda_classes:
+  ocean: [0]
+  urban: [11]
+  annual_crops: [22]
+  tree_crops: [23]
+  agroforestry: [24]
+  pasture: [33]
+  forest_unmanaged: [40, 41, 42, 43, 44, 45]
+  forest_managed:   [400, 410, 420, 430, 440, 450]
+  grassland_shrubland: [55]
+  sparse_barren: [66]
+  water: [77]
+  nodata: [99]
+
+lpjguess_categories:
+  combined:
+    URBAN:    [urban]
+    CROPLAND: [annual_crops, tree_crops, agroforestry]
+    PASTURE:  [pasture]
+    FOREST:   [forest_unmanaged, forest_managed]
+    NATURAL:  [grassland_shrubland, sparse_barren]
+    BARREN:   [ocean, water, nodata]
+  split:
+    URBAN:            [urban]
+    CROPLAND:         [annual_crops, tree_crops, agroforestry]
+    PASTURE:          [pasture]
+    FOREST_MANAGED:   [forest_managed]
+    FOREST_UNMANAGED: [forest_unmanaged]
+    NATURAL:          [grassland_shrubland, sparse_barren]
+    BARREN:           [ocean, water, nodata]
+
+forest_types:
+  combined:
+    ForestNE:  [41, 410]
+    ForestND:  [43, 430]
+    ForestBE:  [42, 420]
+    ForestBD:  [44, 440]
+    ForestPNV: [40, 45, 400, 450]
+  managed:
+    ForestNE_MANAGED:  [410]
+    ForestND_MANAGED:  [430]
+    ForestBE_MANAGED:  [420]
+    ForestBD_MANAGED:  [440]
+    ForestPNV_MANAGED: [400, 450]
+  unmanaged:
+    ForestNE_UNMANAGED:  [41]
+    ForestND_UNMANAGED:  [43]
+    ForestBE_UNMANAGED:  [42]
+    ForestBD_UNMANAGED:  [44]
+    ForestPNV_UNMANAGED: [40, 45]
+
+forest_management_codes:
+  no_forest: 0
+  managed:   1
+  unmanaged: 2
+
+output:
+  dlon: 0.5
+  dlat: 0.5
+  precision: 7

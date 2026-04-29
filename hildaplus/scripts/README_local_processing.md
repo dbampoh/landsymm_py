@@ -137,9 +137,16 @@ python scripts/hilda_smoothing/inspect_smoothed.py \
 
 ### Script: `hildap_tables_netfrac_v3.py`
 
-This updated script handles the new land cover categories and properly maps them to LPJ-GUESS categories.
+This updated script handles the new HILDA+ v2 land cover categories and properly maps them to LPJ-GUESS categories.
 
-### Land Cover Mapping:
+> **The HILDA+ → LPJ-GUESS mapping is now YAML-configurable.** The default
+> reproduces the table below; pass `--mapping-profile <name>` (e.g.
+> `lpjg_v3_default`, `lpjg_legacy_v1`, `lpjg_treecrops_as_forest`) or
+> `--mapping-config /path/to/your.yaml` to use a different policy.
+> See `hildaplus/config/README.md` for the schema and how to add custom
+> profiles.
+
+### Land Cover Mapping (default profile — `lpjg_v3_default`):
 
 | LPJ-GUESS Category | HILDA+ v2 Codes | Notes |
 |-------------------|-----------------|--------|

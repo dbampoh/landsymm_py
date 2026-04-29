@@ -1,0 +1,141 @@
+# Default HILDA+ → LPJ-GUESS land-cover mapping configuration
+# ===========================================================
+#
+# This is the active default config used by the v3 upscaling scripts when
+# no --mapping-config or --mapping-profile flag is supplied.
+#
+# It reproduces the historical hardcoded mapping in
+# `hildap_tables_netfrac_v3.py` exactly, so that adopting the
+# config-driven loader is a no-op on existing pipelines.
+#
+# To use a different mapping, copy this file (or any of the named profiles
+# in `profiles/`) to a new YAML file and pass it via:
+#   --mapping-config /path/to/your_config.yaml
+# Or use a named profile:
+#   --mapping-profile <profile_name>
+#
+# See `README.md` in this directory for the full schema and rationale.
+
+profile:
+  name: "lpjg_v3_default"
+  description: >
+    Active v3 pipeline mapping. Sparse/barren (HILDA+ 66) is treated as NATURAL.
+    CROPLAND includes annual crops (22), tree crops (23), and agroforestry (24).
+    BARREN includes ocean (0), water (77), and no-data (99) only.
+  source: "HILDA+ v2"
+  source_reference: "Winkler et al. (2021) Earth Syst. Sci. Data 13:1119-1148"
+
+# ---------------------------------------------------------------------------
+# Raw HILDA+ class codes
+# ---------------------------------------------------------------------------
+# These reflect the source data's encoding scheme. Edit only if you are
+# pointing the pipeline at a different source dataset (e.g. LUH2, ESA-CCI)
+# whose integer codes differ.
+#
+# HILDA+ v2 codes:
+#   0       Ocean
+#   11      Urban
+#   22      Annual crops
+#   23      Tree crops          (HILDA+ v2 addition)
+#   24      Agroforestry        (HILDA+ v2 addition)
+#   33      Pasture
+#   40-45   Forest (unmanaged): 40=PNV/other, 41=NE, 42=BE, 43=ND, 44=BD, 45=mixed
+#   400-450 Forest (managed):   = unmanaged code × 10 (Wittenbrink integration)
+#   55      Grassland/shrubland
+#   66      Sparse/barren land
+#   77      Water (inland)
+#   99      No data
+hilda_classes:
+  ocean: [0]
+  urban: [11]
+  annual_crops: [22]
+  tree_crops: [23]
+  agroforestry: [24]
+  pasture: [33]
+  forest_unmanaged: [40, 41, 42, 43, 44, 45]
+  forest_managed:   [400, 410, 420, 430, 440, 450]
+  grassland_shrubland: [55]
+  sparse_barren: [66]
+  water: [77]
+  nodata: [99]
+
+# ---------------------------------------------------------------------------
+# LPJ-GUESS land-cover aggregation
+# ---------------------------------------------------------------------------
+# Each category value is a list of `hilda_classes` keys (the loader expands
+# them into integer code lists at load time).
+#
+# Two modes:
+#   `combined` — single FOREST column (managed + unmanaged collapsed).
+#   `split`    — separate FOREST_MANAGED and FOREST_UNMANAGED columns.
+#                Activated when the upscaling script is run with
+#                `--forest-mode split` AND forest-management data is
+#                available (either integrated codes 400-450 in the
+#                LULC_states variable, or a separate --fmfile NetCDF).
+lpjguess_categories:
+  combined:
+    URBAN:    [urban]
+    CROPLAND: [annual_crops, tree_crops, agroforestry]
+    PASTURE:  [pasture]
+    FOREST:   [forest_unmanaged, forest_managed]
+    NATURAL:  [grassland_shrubland, sparse_barren]
+    BARREN:   [ocean, water, nodata]
+  split:
+    URBAN:            [urban]
+    CROPLAND:         [annual_crops, tree_crops, agroforestry]
+    PASTURE:          [pasture]
+    FOREST_MANAGED:   [forest_managed]
+    FOREST_UNMANAGED: [forest_unmanaged]
+    NATURAL:          [grassland_shrubland, sparse_barren]
+    BARREN:           [ocean, water, nodata]
+
+# ---------------------------------------------------------------------------
+# Forest sub-typing for forestfrac.txt
+# ---------------------------------------------------------------------------
+# Per-PFT bucketing of HILDA+ forest codes used to write the forestfrac
+# output. Three variants:
+#   combined  — used when forest_mode == "combined"; each PFT bucket
+#               includes both managed and unmanaged codes.
+#   managed   — used when forest_mode == "split"; only managed codes (×10).
+#   unmanaged — used when forest_mode == "split"; only unmanaged codes.
+#
+# Values here are direct HILDA+ integer codes (NOT aliases) because the
+# bucketing of codes into PFT names is a mapping decision, not an
+# alias-into-categories operation.
+forest_types:
+  combined:
+    ForestNE:  [41, 410]   # Needleleaf Evergreen
+    ForestND:  [43, 430]   # Needleleaf Deciduous
+    ForestBE:  [42, 420]   # Broadleaf Evergreen
+    ForestBD:  [44, 440]   # Broadleaf Deciduous
+    ForestPNV: [40, 45, 400, 450]   # Potential Natural Vegetation / mixed
+  managed:
+    ForestNE_MANAGED:  [410]
+    ForestND_MANAGED:  [430]
+    ForestBE_MANAGED:  [420]
+    ForestBD_MANAGED:  [440]
+    ForestPNV_MANAGED: [400, 450]
+  unmanaged:
+    ForestNE_UNMANAGED:  [41]
+    ForestND_UNMANAGED:  [43]
+    ForestBE_UNMANAGED:  [42]
+    ForestBD_UNMANAGED:  [44]
+    ForestPNV_UNMANAGED: [40, 45]
+
+# ---------------------------------------------------------------------------
+# Forest-management sentinel values
+# ---------------------------------------------------------------------------
+# Used only when a separate forest_management NetCDF is supplied via --fmfile.
+# These integers are how that NetCDF encodes the FM status of each pixel.
+forest_management_codes:
+  no_forest: 0
+  managed:   1
+  unmanaged: 2
+
+# ---------------------------------------------------------------------------
+# Output formatting
+# ---------------------------------------------------------------------------
+output:
+  dlon: 0.5       # LPJ-GUESS longitude resolution (deg)
+  dlat: 0.5       # LPJ-GUESS latitude resolution (deg)
+  precision: 7    # decimals for output text values

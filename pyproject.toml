@@ -17,6 +17,7 @@ dependencies = [
     "rasterio>=1.3",
     "xarray>=2023.1",
     "pandas>=2.0",
+    "pyyaml>=6.0",     # for hildaplus/config (YAML-driven HILDA+→LPJ-GUESS mapping)
 ]
 
 [project.optional-dependencies]

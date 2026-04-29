@@ -1,0 +1,87 @@
+# Profile: lpjg_treecrops_as_forest
+# ==================================
+# Example alternative profile that treats HILDA+ tree crops (code 23) and
+# agroforestry (code 24) as part of FOREST rather than CROPLAND.
+#
+# Rationale: in some carbon-cycle / above-ground-biomass studies, tree
+# crops and agroforestry systems are functionally closer to forests
+# (high standing biomass, woody canopy) than to annual cropland.
+# Including them in FOREST may improve carbon-balance representation in
+# such studies.
+#
+# Use via:  --mapping-profile lpjg_treecrops_as_forest
+#           or LANDSYMM_LANDCOVER_PROFILE=lpjg_treecrops_as_forest
+
+profile:
+  name: "lpjg_treecrops_as_forest"
+  description: >
+    Tree crops (HILDA+ 23) and agroforestry (24) are aggregated into FOREST
+    instead of CROPLAND. CROPLAND contains only annual crops (22).
+    Otherwise identical to lpjg_v3_default.
+  source: "HILDA+ v2"
+  source_reference: "Winkler et al. (2021) Earth Syst. Sci. Data 13:1119-1148"
+
+hilda_classes:
+  ocean: [0]
+  urban: [11]
+  annual_crops: [22]
+  tree_crops: [23]
+  agroforestry: [24]
+  pasture: [33]
+  forest_unmanaged: [40, 41, 42, 43, 44, 45]
+  forest_managed:   [400, 410, 420, 430, 440, 450]
+  grassland_shrubland: [55]
+  sparse_barren: [66]
+  water: [77]
+  nodata: [99]
+
+lpjguess_categories:
+  combined:
+    URBAN:    [urban]
+    CROPLAND: [annual_crops]                                 # tree crops + agroforestry moved to FOREST
+    PASTURE:  [pasture]
+    FOREST:   [forest_unmanaged, forest_managed, tree_crops, agroforestry]
+    NATURAL:  [grassland_shrubland, sparse_barren]
+    BARREN:   [ocean, water, nodata]
+  split:
+    URBAN:            [urban]
+    CROPLAND:         [annual_crops]
+    PASTURE:          [pasture]
+    FOREST_MANAGED:   [forest_managed, tree_crops, agroforestry]   # treat as managed forest
+    FOREST_UNMANAGED: [forest_unmanaged]
+    NATURAL:          [grassland_shrubland, sparse_barren]
+    BARREN:           [ocean, water, nodata]
+
+forest_types:
+  combined:
+    ForestNE:  [41, 410]
+    ForestND:  [43, 430]
+    ForestBE:  [42, 420]
+    ForestBD:  [44, 440]
+    ForestPNV: [40, 45, 400, 450]
+    # NOTE: tree_crops (23) and agroforestry (24) are NOT included in any
+    # forest PFT bucket — they go into the FOREST land-cover total but are
+    # not assigned to a Needleleaf/Broadleaf/PNV PFT, since their species
+    # composition isn't determinable from the HILDA+ class alone.
+  managed:
+    ForestNE_MANAGED:  [410]
+    ForestND_MANAGED:  [430]
+    ForestBE_MANAGED:  [420]
+    ForestBD_MANAGED:  [440]
+    ForestPNV_MANAGED: [400, 450]
+  unmanaged:
+    ForestNE_UNMANAGED:  [41]
+    ForestND_UNMANAGED:  [43]
+    ForestBE_UNMANAGED:  [42]
+    ForestBD_UNMANAGED:  [44]
+    ForestPNV_UNMANAGED: [40, 45]
+
+forest_management_codes:
+  no_forest: 0
+  managed:   1
+  unmanaged: 2
+
+output:
+  dlon: 0.5
+  dlat: 0.5
+  precision: 7

@@ -4,14 +4,53 @@ These scripts use the pre-processed, smoothed Hilda+ Land Cover file created by 
 
 ## Files:
 
-* `hildap_tables.py`: this one creates tables of land cover net fractions, transitions and managed forest relative cover, and saves them to text files.
-* `launch_tables.py`: this one is to run the above script in the IFU cluster (keal)
+* `hildap_tables_netfrac_v3.py`: **(active)** netfrac + forestfrac upscaling, single-process. Driven by the YAML mapping config in `hildaplus/config/`.
+* `hildap_tables_netfrac_v3_parallel.py`: **(active)** parallel version of the above (multi-process). Same YAML config.
+* `hildap_tables.py`: **(legacy)** the original, also produces gross transitions in addition to netfrac/forestfrac. Hardcoded mapping policy (matches the `lpjg_legacy_v1` profile in `hildaplus/config/`); not yet refactored to use the YAML loader.
+* `launch_tables.py`: HPC SLURM submitter for the legacy `hildap_tables.py` (only).
+* `inspect_netfrac_forestfrac.py`: post-run inspection of an already-produced netfrac text file.
 * `README.md`: this file
+
+## YAML-driven mapping configuration
+
+The HILDA+ → LPJ-GUESS land-cover aggregation policy used by the v3 scripts
+is **configurable via YAML**, not hardcoded. The default behavior reproduces
+the historical hardcoded mapping exactly. Pass either of these flags to the
+v3 scripts (or to `run_chain.sh`):
+
+* `--mapping-config /path/to/your.yaml` — custom mapping file
+* `--mapping-profile <name>` — one of the named profiles shipped with the package
+  (e.g. `lpjg_v3_default`, `lpjg_legacy_v1`, `lpjg_treecrops_as_forest`)
+
+See `hildaplus/config/README.md` for the full schema.
 
 
 ## Usage:
 
 ### Running in serial (e.g. your laptop)
+
+For the active v3 pipeline, prefer `run_chain.sh` (which invokes the
+upscaling scripts under the hood). To invoke the upscaling scripts
+directly:
+
+```bash
+# v3 (single-process)
+python hildaplus/scripts/hildaplus-upscaling/hildap_tables_netfrac_v3.py \
+    --datafile /path/to/hildaplus_smoothed.nc \
+    --gridlist /path/to/gridlist.txt \
+    --output   /path/to/netfrac_output.txt
+
+# v3 with a non-default mapping profile
+python hildaplus/scripts/hildaplus-upscaling/hildap_tables_netfrac_v3.py \
+    --datafile /path/to/hildaplus_smoothed.nc \
+    --gridlist /path/to/gridlist.txt \
+    --output   /path/to/netfrac_output.txt \
+    --mapping-profile lpjg_treecrops_as_forest
+```
+
+### Legacy `hildap_tables.py` configuration
+
+The legacy script still uses hardcoded constants. To run it:
 
 1. Edit the `hildap_tables.py`
     - `FNAME_DATAFILE`: path/fname to the smoothed file

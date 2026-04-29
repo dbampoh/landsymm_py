@@ -3,84 +3,84 @@ import numpy as np
 from netCDF4 import Dataset
 from pathlib import Path
 from timeit import default_timer as timer
-from sys import argv, version_info
+from sys import version_info
 import os
+import sys
 
 # Configuration - paths computed relative to script location (landsymm_py root is 3 levels up)
 # This script is a netfrac-only adaptation of the original upscaling workflow.
-_HILDA_DATA = str(Path(__file__).resolve().parents[3] / 'data' / 'geodata_py' / 'HILDA+' / 'data')
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_HILDA_DATA = str(_PROJECT_ROOT / 'data' / 'geodata_py' / 'HILDA+' / 'data')
 FNAME_DATAFILE = os.path.join(_HILDA_DATA, 'hildaplus_smoothed.nc')
 FNAME_FM_DATAFILE = None  # Path to forest management file if separate (optional)
-DLON_LPJG = 0.5  # LPJ-GUESS resolution in longitude (deg)
-DLAT_LPJG = 0.5  # LPJ-GUESS resolution in latitude (deg)
-PRECISION = 7    # Number of decimals to round output
 OUTPUT_DIR = os.path.join(_HILDA_DATA, 'output')
 
 # Gridlist file
 FNAME_GRIDLIST = os.path.join(_HILDA_DATA, 'input_data', 'gridlist_in_62892_and_climate.txt')
 
-# Land cover type definitions for new HILDA+ v2
-# Individual land cover codes
-LC_OCEAN = [0]
-LC_URBAN = [11]
-LC_ANNUAL_CROPS = [22]
-LC_TREE_CROPS = [23]
-LC_AGROFORESTRY = [24]
-LC_PASTURE = [33]
-LC_FOREST_UNMANAGED = [40, 41, 42, 43, 44, 45]  # Forest codes
-LC_FOREST_MANAGED = [400, 410, 420, 430, 440, 450]  # Managed forest codes (×10, if integrated)
-LC_GRASSLAND_SHRUBLAND = [55]
-LC_SPARSE_BARREN = [66]
-LC_WATER = [77]
-LC_NODATA = [99]
+# ---------------------------------------------------------------------------
+# YAML-driven HILDA+ → LPJ-GUESS mapping config
+# ---------------------------------------------------------------------------
+# The land-cover aggregation policy (which HILDA+ codes go into URBAN,
+# CROPLAND, PASTURE, FOREST, NATURAL, BARREN) is loaded from YAML so that
+# users can tweak it without editing this script. See
+# `hildaplus/config/README.md` for the schema. Default behavior is
+# unchanged from the historical hardcoded mapping (parity verified by
+# `landsymm/tests/test_landcover_config_parity.py`).
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from hildaplus.config import (  # noqa: E402  (path-tweak-then-import is intentional)
+    load_landcover_config,
+    get_categories,
+    get_forest_types,
+    get_output_settings,
+)
 
-FOREST_TYPES = {
-    "ForestNE": [41, 410],
-    "ForestND": [43, 430],
-    "ForestBE": [42, 420],
-    "ForestBD": [44, 440],
-    "ForestPNV": [40, 45, 400, 450],
-}
+# Module-level placeholders populated by `_init_config()` once the script's
+# CLI arguments (or environment variables) have been resolved. Keeping these
+# at module level mirrors the old hardcoded constants' visibility.
+CFG = None
+DLON_LPJG = 0.5
+DLAT_LPJG = 0.5
+PRECISION = 7
+LC_FOREST_UNMANAGED = []
+LC_FOREST_MANAGED = []
+FOREST_TYPES = {}
+FOREST_TYPES_MANAGED = {}
+FOREST_TYPES_UNMANAGED = {}
 
-FOREST_TYPES_MANAGED = {
-    "ForestNE_MANAGED": [410],
-    "ForestND_MANAGED": [430],
-    "ForestBE_MANAGED": [420],
-    "ForestBD_MANAGED": [440],
-    "ForestPNV_MANAGED": [400, 450],
-}
 
-FOREST_TYPES_UNMANAGED = {
-    "ForestNE_UNMANAGED": [41],
-    "ForestND_UNMANAGED": [43],
-    "ForestBE_UNMANAGED": [42],
-    "ForestBD_UNMANAGED": [44],
-    "ForestPNV_UNMANAGED": [40, 45],
-}
+def _init_config(config_path=None, profile=None):
+    """Load the YAML mapping config and populate module-level shorthands."""
+    global CFG, DLON_LPJG, DLAT_LPJG, PRECISION
+    global LC_FOREST_UNMANAGED, LC_FOREST_MANAGED
+    global FOREST_TYPES, FOREST_TYPES_MANAGED, FOREST_TYPES_UNMANAGED
 
-# Aggregated categories for LPJ-GUESS (final mapping agreed in this workflow).
+    CFG = load_landcover_config(config_path=config_path, profile=profile)
+
+    out = get_output_settings(CFG)
+    DLON_LPJG = out["dlon"]
+    DLAT_LPJG = out["dlat"]
+    PRECISION = out["precision"]
+
+    raw = CFG["hilda_classes"]
+    LC_FOREST_UNMANAGED = list(raw.get("forest_unmanaged", []))
+    LC_FOREST_MANAGED = list(raw.get("forest_managed", []))
+
+    FOREST_TYPES = get_forest_types(CFG, "combined")
+    FOREST_TYPES_MANAGED = get_forest_types(CFG, "managed")
+    FOREST_TYPES_UNMANAGED = get_forest_types(CFG, "unmanaged")
+
+
 def get_lpjguess_categories(has_fm, forest_mode):
-    """Define LPJ-GUESS land cover categories based on new HILDA+ codes."""
-    categories = {
-        'URBAN': LC_URBAN,
-        'CROPLAND': LC_ANNUAL_CROPS + LC_TREE_CROPS + LC_AGROFORESTRY,
-        'PASTURE': LC_PASTURE,
-    }
-    if forest_mode == "split" and has_fm:
-        categories.update({
-            "FOREST_MANAGED": LC_FOREST_MANAGED,
-            "FOREST_UNMANAGED": LC_FOREST_UNMANAGED,
-            "NATURAL": LC_GRASSLAND_SHRUBLAND + LC_SPARSE_BARREN,
-        })
-    else:
-        categories.update({
-            "FOREST": LC_FOREST_UNMANAGED + LC_FOREST_MANAGED,
-            "NATURAL": LC_GRASSLAND_SHRUBLAND + LC_SPARSE_BARREN,
-        })
-    categories.update({
-        'BARREN': LC_OCEAN + LC_WATER + LC_NODATA,  # Only truly barren areas
-    })
-    return categories
+    """Return LPJ-GUESS land-cover categories from the loaded config.
+
+    Backwards-compatible shim around `hildaplus.config.get_categories` so that
+    the existing call sites in this script keep working unchanged.
+    """
+    if CFG is None:
+        _init_config()
+    return get_categories(CFG, has_fm=has_fm, forest_mode=forest_mode)
 
 
 def read_gridlist(fname, start=0, nlines=-1):
@@ -138,7 +138,15 @@ def get_site_data(data_handle, lon, lat, dlon, dlat, site):
 
 
 def make_netfrac_table(gridlist, lc_data, lon, lat, time, dlon, dlat, fm_data=None, forest_mode="combined"):
-    """Generate net fractions and forest fraction tables."""
+    """Generate net fractions and forest fraction tables.
+
+    Returns
+    -------
+    (netfrac_table, forestfrac_table, integrated_fm) tuple. The third element
+    indicates whether integrated forest-management codes (400-450) were
+    detected in the LULC data; it is used by the caller to decide which
+    forest-headers dictionary to pass to ``write_netfrac_table``.
+    """
     netfrac_table = []
     forestfrac_table = []
     categories = get_lpjguess_categories(has_fm=fm_data is not None, forest_mode=forest_mode)
@@ -203,18 +211,17 @@ def make_netfrac_table(gridlist, lc_data, lon, lat, time, dlon, dlat, fm_data=No
                         count = np.count_nonzero(np.isin(lc_current, codes))
                         row_forestfrac.append(count / forest_total)
             forestfrac_table.append(row_forestfrac)
-    
-    return netfrac_table, forestfrac_table
+
+    return netfrac_table, forestfrac_table, integrated_fm
 
 
 def write_netfrac_table(table, fname, categories):
     """Write the net fractions table to file."""
     width_coord = 10
     width_year = 6
-    width_data = max(PRECISION + 5, max(len(c) for c in cat_names) + 1)
-    
     cat_names = list(categories.keys())
     ndata_columns = len(cat_names)
+    width_data = max(PRECISION + 5, max(len(c) for c in cat_names) + 1)
     
     widths = [width_coord, width_coord, width_year] + [width_data] * ndata_columns
     format_list = [f'%{width_coord}.3f', f'%{width_coord}.3f', f'%{width_year}d'] \
@@ -293,7 +300,7 @@ def main(fname_dataset, fname_gridlist, fname_fm=None, start=None, nlines=None, 
     
     # Construct netfrac table
     print("\nConstructing net fractions table...")
-    netfrac_table, forestfrac_table = make_netfrac_table(
+    netfrac_table, forestfrac_table, integrated_fm = make_netfrac_table(
         gridlist, data, lon, lat, time, dlon, dlat, fm_data, forest_mode=forest_mode
     )
     
@@ -334,6 +341,13 @@ def parse_args():
                         help="Override forestfrac output file path (flag version)")
     parser.add_argument("--forest-mode", choices=["combined", "split"], default="combined",
                         help="Forest handling in outputs (default: combined)")
+    parser.add_argument("--mapping-config", default=None,
+                        help="Path to a custom HILDA+ -> LPJ-GUESS mapping YAML "
+                             "(see hildaplus/config/README.md for the schema)")
+    parser.add_argument("--mapping-profile", default=None,
+                        help="Named mapping profile (e.g. lpjg_v3_default, lpjg_legacy_v1, "
+                             "lpjg_treecrops_as_forest); resolves to "
+                             "hildaplus/config/profiles/<name>.yaml")
     return parser.parse_args()
 
 
@@ -345,6 +359,12 @@ if __name__ == '__main__':
     args = parse_args()
     if (args.start is None) ^ (args.nlines is None):
         exit('Usage: python hildap_tables_netfrac_v3.py [start nlines [suffix [output_path]]] [--benchmark-lines N]')
+
+    # Initialize the YAML-driven mapping config (CLI flags override env vars
+    # which override the on-disk default; see hildaplus/config/README.md).
+    _init_config(config_path=args.mapping_config, profile=args.mapping_profile)
+    print(f"Land-cover mapping config: {CFG.get('_source_path')}")
+    print(f"  Profile: {CFG.get('profile', {}).get('name', '<unnamed>')}")
 
     # Start timer
     t_start = timer()

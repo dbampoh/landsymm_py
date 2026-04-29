@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 from multiprocessing import Pool
 from pathlib import Path
 from timeit import default_timer as timer
@@ -8,76 +9,85 @@ import numpy as np
 from netCDF4 import Dataset
 
 # Configuration - paths computed relative to script location (landsymm_py root is 3 levels up)
-_HILDA_DATA = str(Path(__file__).resolve().parents[3] / 'data' / 'geodata_py' / 'HILDA+' / 'data')
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_HILDA_DATA = str(_PROJECT_ROOT / 'data' / 'geodata_py' / 'HILDA+' / 'data')
 FNAME_DATAFILE = os.path.join(_HILDA_DATA, 'hildaplus_smoothed.nc')
 FNAME_FM_DATAFILE = None  # Path to forest management file if separate (optional)
-DLON_LPJG = 0.5  # LPJ-GUESS resolution in longitude (deg)
-DLAT_LPJG = 0.5  # LPJ-GUESS resolution in latitude (deg)
-PRECISION = 7    # Number of decimals to round output
 OUTPUT_DIR = os.path.join(_HILDA_DATA, 'output')
 FNAME_GRIDLIST = os.path.join(_HILDA_DATA, 'input_data', 'gridlist_in_62892_and_climate.txt')
 
-# Land cover type definitions for new HILDA+ v2
-LC_OCEAN = [0]
-LC_URBAN = [11]
-LC_ANNUAL_CROPS = [22]
-LC_TREE_CROPS = [23]
-LC_AGROFORESTRY = [24]
-LC_PASTURE = [33]
-LC_FOREST_UNMANAGED = [40, 41, 42, 43, 44, 45]  # Natural forest codes
-LC_FOREST_MANAGED = [400, 410, 420, 430, 440, 450]  # Managed forest codes (×10)
-LC_GRASSLAND_SHRUBLAND = [55]
-LC_SPARSE_BARREN = [66]
-LC_WATER = [77]
-LC_NODATA = [99]
+# ---------------------------------------------------------------------------
+# YAML-driven HILDA+ → LPJ-GUESS mapping config
+# ---------------------------------------------------------------------------
+# See `hildaplus/config/README.md` for the schema. Default behavior is
+# unchanged from the historical hardcoded mapping (parity verified by
+# `landsymm/tests/test_landcover_config_parity.py`).
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+from hildaplus.config import (  # noqa: E402  (path-tweak-then-import is intentional)
+    load_landcover_config,
+    get_categories,
+    get_forest_types,
+    get_forest_management_codes,
+    get_output_settings,
+)
 
-# Forest fractions by type (codes include integrated managed variants if present)
-FOREST_TYPES = {
-    "ForestNE": [41, 410],
-    "ForestND": [43, 430],
-    "ForestBE": [42, 420],
-    "ForestBD": [44, 440],
-    "ForestPNV": [40, 45, 400, 450],
-}
+# Module-level placeholders populated by `_init_config()` once CLI args
+# are resolved. These mirror the original hardcoded constants so existing
+# in-script references keep working.
+CFG = None
+DLON_LPJG = 0.5
+DLAT_LPJG = 0.5
+PRECISION = 7
+LC_FOREST_UNMANAGED = []
+LC_FOREST_MANAGED = []
+LC_GRASSLAND_SHRUBLAND = []
+LC_SPARSE_BARREN = []
+FOREST_TYPES = {}
+FOREST_TYPES_MANAGED = {}
+FOREST_TYPES_UNMANAGED = {}
+# FM sentinel constants (previously undefined — latent bug fix).
+FM_NO_FOREST = 0
+FM_MANAGED = 1
+FM_UNMANAGED = 2
 
-FOREST_TYPES_MANAGED = {
-    "ForestNE_MANAGED": [410],
-    "ForestND_MANAGED": [430],
-    "ForestBE_MANAGED": [420],
-    "ForestBD_MANAGED": [440],
-    "ForestPNV_MANAGED": [400, 450],
-}
 
-FOREST_TYPES_UNMANAGED = {
-    "ForestNE_UNMANAGED": [41],
-    "ForestND_UNMANAGED": [43],
-    "ForestBE_UNMANAGED": [42],
-    "ForestBD_UNMANAGED": [44],
-    "ForestPNV_UNMANAGED": [40, 45],
-}
+def _init_config(config_path=None, profile=None):
+    """Load the YAML mapping config and populate module-level shorthands."""
+    global CFG, DLON_LPJG, DLAT_LPJG, PRECISION
+    global LC_FOREST_UNMANAGED, LC_FOREST_MANAGED
+    global LC_GRASSLAND_SHRUBLAND, LC_SPARSE_BARREN
+    global FOREST_TYPES, FOREST_TYPES_MANAGED, FOREST_TYPES_UNMANAGED
+    global FM_NO_FOREST, FM_MANAGED, FM_UNMANAGED
+
+    CFG = load_landcover_config(config_path=config_path, profile=profile)
+
+    out = get_output_settings(CFG)
+    DLON_LPJG = out["dlon"]
+    DLAT_LPJG = out["dlat"]
+    PRECISION = out["precision"]
+
+    raw = CFG["hilda_classes"]
+    LC_FOREST_UNMANAGED = list(raw.get("forest_unmanaged", []))
+    LC_FOREST_MANAGED = list(raw.get("forest_managed", []))
+    LC_GRASSLAND_SHRUBLAND = list(raw.get("grassland_shrubland", []))
+    LC_SPARSE_BARREN = list(raw.get("sparse_barren", []))
+
+    FOREST_TYPES = get_forest_types(CFG, "combined")
+    FOREST_TYPES_MANAGED = get_forest_types(CFG, "managed")
+    FOREST_TYPES_UNMANAGED = get_forest_types(CFG, "unmanaged")
+
+    fm_codes = get_forest_management_codes(CFG)
+    FM_NO_FOREST = fm_codes.get("no_forest", 0)
+    FM_MANAGED = fm_codes.get("managed", 1)
+    FM_UNMANAGED = fm_codes.get("unmanaged", 2)
 
 
 def get_lpjguess_categories(has_fm, forest_mode):
-    categories = {
-        'URBAN': LC_URBAN,
-        'CROPLAND': LC_ANNUAL_CROPS + LC_TREE_CROPS + LC_AGROFORESTRY,
-        'PASTURE': LC_PASTURE,
-    }
-    if forest_mode == "split" and has_fm:
-        categories.update({
-            'FOREST_MANAGED': LC_FOREST_MANAGED,
-            'FOREST_UNMANAGED': LC_FOREST_UNMANAGED,
-            'NATURAL': LC_GRASSLAND_SHRUBLAND + LC_SPARSE_BARREN,
-        })
-    else:
-        categories.update({
-            'FOREST': LC_FOREST_UNMANAGED + LC_FOREST_MANAGED,
-            'NATURAL': LC_GRASSLAND_SHRUBLAND + LC_SPARSE_BARREN,
-        })
-    categories.update({
-        'BARREN': LC_OCEAN + LC_WATER + LC_NODATA,
-    })
-    return categories
+    """Backwards-compatible shim around `hildaplus.config.get_categories`."""
+    if CFG is None:
+        _init_config()
+    return get_categories(CFG, has_fm=has_fm, forest_mode=forest_mode)
 
 
 def read_gridlist(fname, start=0, nlines=-1):
@@ -227,7 +237,13 @@ def write_netfrac_table(table, fname, categories, include_header=True):
 
 
 def process_chunk(args):
-    chunk_idx, gridlist, datafile, fmfile, integrated_fm, temp_dir, forest_mode = args
+    (chunk_idx, gridlist, datafile, fmfile, integrated_fm, temp_dir,
+     forest_mode, mapping_config, mapping_profile) = args
+
+    # Workers may be spawned (not forked) on macOS/Windows, in which case
+    # module-level config state isn't inherited from the parent. Re-init
+    # safely either way.
+    _init_config(config_path=mapping_config, profile=mapping_profile)
 
     lc_data, lon, lat, time, dlon, dlat, ds_lc = get_dataset(datafile, 'LULC_states')
     fm_data, ds_fm = get_forest_management_data(fmfile)
@@ -274,6 +290,13 @@ def parse_args():
                         help="Override forestfrac output file path (flag version)")
     parser.add_argument("--forest-mode", choices=["combined", "split"], default="combined",
                         help="Forest handling in outputs (default: combined)")
+    parser.add_argument("--mapping-config", default=None,
+                        help="Path to a custom HILDA+ -> LPJ-GUESS mapping YAML "
+                             "(see hildaplus/config/README.md for the schema)")
+    parser.add_argument("--mapping-profile", default=None,
+                        help="Named mapping profile (e.g. lpjg_v3_default, lpjg_legacy_v1, "
+                             "lpjg_treecrops_as_forest); resolves to "
+                             "hildaplus/config/profiles/<name>.yaml")
     return parser.parse_args()
 
 
@@ -282,6 +305,12 @@ def main():
     if (args.start is None) ^ (args.nlines is None):
         exit('Usage: python hildap_tables_netfrac_v3_parallel.py [start nlines [suffix [output_path]]] '
              '[--benchmark-lines N] [--workers N] [--chunk-lines N]')
+
+    # Initialize the YAML-driven mapping config (CLI flags override env vars
+    # which override the on-disk default; see hildaplus/config/README.md).
+    _init_config(config_path=args.mapping_config, profile=args.mapping_profile)
+    print(f"Land-cover mapping config: {CFG.get('_source_path')}")
+    print(f"  Profile: {CFG.get('profile', {}).get('name', '<unnamed>')}")
 
     suffix = f'.{args.suffix}' if args.suffix != '' else ''
     output_path = args.output if args.output is not None else args.output_path
@@ -318,11 +347,16 @@ def main():
         forest_mode = "combined"
 
     # Build chunks
+    # NOTE: We pass the resolved config path through so worker processes can
+    # re-load the YAML deterministically. (Sending the parsed dict via pickle
+    # would also work but introduces unnecessary cross-process serialization.)
     chunks = []
+    resolved_cfg_path = CFG.get('_source_path') if CFG else None
     for idx in range(0, len(gridlist), args.chunk_lines):
         chunk_gridlist = gridlist[idx:idx + args.chunk_lines]
         chunk_idx = idx // args.chunk_lines
-        chunks.append((chunk_idx, chunk_gridlist, datafile, fmfile, integrated_fm, temp_dir, forest_mode))
+        chunks.append((chunk_idx, chunk_gridlist, datafile, fmfile, integrated_fm,
+                       temp_dir, forest_mode, resolved_cfg_path, None))
 
     categories = get_lpjguess_categories(has_fm=fmfile is not None, forest_mode=forest_mode)
     start_time = timer()

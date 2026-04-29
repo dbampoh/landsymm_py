@@ -158,6 +158,14 @@ export LANDSYMM_DATA_DIR=/path/to/shared/data
 hildaplus/scripts/run_chain.sh --states /path/to/states.nc
 ```
 
+The HILDA+ → LPJ-GUESS land-cover aggregation policy (which HILDA+ class
+codes go into URBAN, CROPLAND, PASTURE, FOREST, NATURAL, BARREN) is
+**configurable via YAML** — you can change it without editing Python source.
+Pass `--mapping-profile <name>` (e.g. `lpjg_v3_default`, `lpjg_legacy_v1`,
+`lpjg_treecrops_as_forest`) or `--mapping-config /path/to/your.yaml` to
+`run_chain.sh`. The default reproduces the historical hardcoded mapping.
+See `hildaplus/config/README.md` for the schema and how to add custom profiles.
+
 **Stage 2 — Remapping:**
 
 ```bash

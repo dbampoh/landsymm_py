@@ -2,6 +2,15 @@
 
 These scripts use the pre-processed, smoothed Hilda+ Land Cover file created by Martin (martin.wittenbrink@kit.edu) to produce upscaled versions usable by LPJ-GUESS. Python 3.7 or higher is required!
 
+> **NOTE — historical document.** This file documents the legacy
+> `hildap_tables.py` workflow (HPC-oriented, hardcoded mapping). The
+> active pipeline is now `hildap_tables_netfrac_v3*.py` driven by
+> `run_chain.sh` with a YAML-configurable HILDA+ → LPJ-GUESS mapping;
+> see `hildaplus/config/README.md` for the schema and
+> `hildaplus/scripts/hildaplus-upscaling/README.md` for the active
+> pipeline's usage. The legacy script's hardcoded policy is preserved
+> as the `lpjg_legacy_v1` named profile.
+
 ## Files:
 
 * `hildap_tables.py`: this one creates tables of land cover net fractions, transitions and managed forest relative cover, and saves them to text files.

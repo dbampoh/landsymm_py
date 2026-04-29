@@ -289,7 +289,7 @@ Written to `data/geodata_py/HILDA+/data/output/` (configurable via `--output-dir
 
 These outputs are consumed directly by Stage 2 (remapping) via `config.get_hildaplus_output_dir()`.
 
-### Land Cover Mapping (v3, combined mode)
+### Land Cover Mapping (v3, combined mode — default)
 
 | Output Category | HILDA+ Codes |
 |---|---|
@@ -299,6 +299,68 @@ These outputs are consumed directly by Stage 2 (remapping) via `config.get_hilda
 | FOREST | 40-45, 400-450 (managed) |
 | NATURAL | 55, 66 |
 | BARREN | 0, 77, 99 |
+
+#### YAML-Configurable Mapping Policy
+
+The HILDA+ → LPJ-GUESS aggregation policy shown above is the **default**, but
+it is **not hardcoded** — it is loaded from a YAML config file at runtime so
+you can change which HILDA+ codes go into which LPJ-GUESS class without
+editing Python source.
+
+**Why this matters scientifically:** Different LandSyMM studies and
+LPJ-GUESS configurations have made different defensible choices about
+the mapping. For example: should HILDA+ tree crops (code 23) and
+agroforestry (24) be lumped into CROPLAND (default), or counted with
+FOREST (some carbon-cycle studies)? Should sparse/barren (66) be
+NATURAL (default) or BARREN (legacy)? Hardcoding any one answer forces
+every user to fork the codebase to change it.
+
+**Config file:** `hildaplus/config/lpjg_landcover_mapping.yaml` (default)
+or one of the named profiles in `hildaplus/config/profiles/`:
+
+| Profile | Policy summary |
+|---------|----------------|
+| `lpjg_v3_default` | The default — sparse/barren → NATURAL; CROPLAND includes annual + tree + agroforestry |
+| `lpjg_legacy_v1` | Reproduces the legacy `hildap_tables.py` policy — sparse/barren → BARREN; CROPLAND only annual crops |
+| `lpjg_treecrops_as_forest` | Tree crops (23) and agroforestry (24) → FOREST instead of CROPLAND |
+
+**Resolution order** (highest precedence first):
+
+1. `--mapping-config /path/to/your.yaml` CLI flag
+2. Environment variable `LANDSYMM_LANDCOVER_CONFIG=/path/to/your.yaml`
+3. `--mapping-profile <name>` CLI flag (resolves to `profiles/<name>.yaml`)
+4. Environment variable `LANDSYMM_LANDCOVER_PROFILE=<name>`
+5. Default: `hildaplus/config/lpjg_landcover_mapping.yaml`
+
+**Usage examples:**
+
+```bash
+# Default (no flag) — reproduces historical hardcoded mapping
+hildaplus/scripts/run_chain.sh --states /path/to/states.nc
+
+# Use a named profile
+hildaplus/scripts/run_chain.sh --states /path/to/states.nc \
+    --mapping-profile lpjg_legacy_v1
+
+# Use a custom config file
+hildaplus/scripts/run_chain.sh --states /path/to/states.nc \
+    --mapping-config /path/to/my_custom_mapping.yaml
+
+# Or set via env var (useful for batch jobs)
+export LANDSYMM_LANDCOVER_PROFILE=lpjg_treecrops_as_forest
+hildaplus/scripts/run_chain.sh --states /path/to/states.nc
+```
+
+**Adding a new profile:** Copy any file in `hildaplus/config/profiles/`
+to a new name, edit the `lpjguess_categories` and/or `forest_types`
+sections, and reference it via `--mapping-profile <new_name>`. See
+`hildaplus/config/README.md` for the full schema documentation.
+
+**Validation:** The loader rejects configs in which the same HILDA+
+code appears in two different categories within the same mode (e.g.
+assigning code 66 to both NATURAL and BARREN). Parity tests in
+`landsymm/tests/test_landcover_config_parity.py` guarantee that the
+default profile reproduces the historical hardcoded mapping exactly.
 
 ### Key Parameters
 

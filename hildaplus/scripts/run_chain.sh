@@ -26,6 +26,12 @@ Mode selection:
   --smooth-mode single|parallel    (default: parallel)
   --upscale-mode single|parallel   (default: parallel)
 
+HILDA+ -> LPJ-GUESS land-cover mapping (passed through to upscaling script):
+  --mapping-config PATH           Path to a custom mapping YAML
+                                  (see hildaplus/config/README.md)
+  --mapping-profile NAME          Named profile (e.g. lpjg_v3_default,
+                                  lpjg_legacy_v1, lpjg_treecrops_as_forest)
+
 Benchmark options:
   --benchmark                     Run benchmark chain (mini NetCDF + mini gridlist)
   --benchmark-chunks N            Smoothing benchmark chunks (default: 2)
@@ -68,6 +74,8 @@ UPSCALE_CHUNK_LINES=500
 PRINT_CONFIG="false"
 DRY_RUN="false"
 INSPECT="false"
+MAPPING_CONFIG=""
+MAPPING_PROFILE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -84,6 +92,8 @@ while [[ $# -gt 0 ]]; do
     --smooth-chunk-size) SMOOTH_CHUNK_SIZE="$2"; shift 2 ;;
     --upscale-workers) UPSCALE_WORKERS="$2"; shift 2 ;;
     --upscale-chunk-lines) UPSCALE_CHUNK_LINES="$2"; shift 2 ;;
+    --mapping-config) MAPPING_CONFIG="$2"; shift 2 ;;
+    --mapping-profile) MAPPING_PROFILE="$2"; shift 2 ;;
     --print-config) PRINT_CONFIG="true"; shift ;;
     --dry-run) DRY_RUN="true"; shift ;;
     --inspect) INSPECT="true"; shift ;;
@@ -91,6 +101,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1"; show_help; exit 1 ;;
   esac
 done
+
+# Build pass-through args for the upscaling script
+UPSCALE_MAPPING_ARGS=""
+[[ -n "${MAPPING_CONFIG}" ]]  && UPSCALE_MAPPING_ARGS+=" --mapping-config \"${MAPPING_CONFIG}\""
+[[ -n "${MAPPING_PROFILE}" ]] && UPSCALE_MAPPING_ARGS+=" --mapping-profile \"${MAPPING_PROFILE}\""
 
 if [[ -z "${STATES}" ]]; then
   echo "Error: --states is required"
@@ -197,7 +212,7 @@ if [[ "${UPSCALE_MODE}" == "parallel" ]]; then
       --output \"${MINI_NETFRAC_OUT}\" \
       --workers \"${UPSCALE_WORKERS}\" \
       --chunk-lines \"${UPSCALE_CHUNK_LINES}\" \
-      --benchmark-lines \"${BENCHMARK_LINES}\""
+      --benchmark-lines \"${BENCHMARK_LINES}\"${UPSCALE_MAPPING_ARGS}"
   else
     run_cmd "python \"${UPSCALE_SCRIPT}\" \
       --datafile \"${SMOOTH_OUT}\" \
@@ -205,7 +220,7 @@ if [[ "${UPSCALE_MODE}" == "parallel" ]]; then
       ${FMFILE:+--fmfile \"${FMFILE}\"} \
       --output \"${NETFRAC_OUT}\" \
       --workers \"${UPSCALE_WORKERS}\" \
-      --chunk-lines \"${UPSCALE_CHUNK_LINES}\""
+      --chunk-lines \"${UPSCALE_CHUNK_LINES}\"${UPSCALE_MAPPING_ARGS}"
   fi
 else
   UPSCALE_SCRIPT="${SCRIPT_DIR}/hildaplus-upscaling/hildap_tables_netfrac_v3.py"
@@ -215,13 +230,13 @@ else
       --gridlist \"${MINI_GRIDLIST}\" \
       ${FMFILE:+--fmfile \"${FMFILE}\"} \
       --output \"${MINI_NETFRAC_OUT}\" \
-      --benchmark-lines \"${BENCHMARK_LINES}\""
+      --benchmark-lines \"${BENCHMARK_LINES}\"${UPSCALE_MAPPING_ARGS}"
   else
     run_cmd "python \"${UPSCALE_SCRIPT}\" \
       --datafile \"${SMOOTH_OUT}\" \
       --gridlist \"${GRIDLIST}\" \
       ${FMFILE:+--fmfile \"${FMFILE}\"} \
-      --output \"${NETFRAC_OUT}\""
+      --output \"${NETFRAC_OUT}\"${UPSCALE_MAPPING_ARGS}"
   fi
 fi
 
