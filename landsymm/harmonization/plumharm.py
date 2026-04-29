@@ -1,6 +1,27 @@
-"""Main PLUM harmonization driver (partial).
+"""Main PLUM harmonization driver.
 
-Pseudocode:
+Why this module exists
+======================
+PLUM/PLUMv2 produces raw scenario projections of land use, fertilizer,
+and irrigation at half-degree resolution from year ``year1`` (typically
+2011) onwards. Those raw projections do *not* exactly match the
+historical land-use baseline at the boundary year ``base_year``
+(typically 2010). Feeding the raw PLUM outputs directly into LPJ-GUESS
+would therefore cause large areas of sudden agricultural abandonment
+and expansion at the historical-to-future boundary, which would
+contaminate the carbon-cycle interpretation of any downstream analysis
+(Rabin et al., 2020, *Earth Syst. Dynam.* 11:357-376, Sect. 2.3).
+
+This module implements the harmonization routine — adapted from the
+LUH1 land-use harmonization of Hurtt et al. (2011) — that adjusts
+PLUM scenario outputs to ensure a smooth transition from the
+historical baseline (Stage 2 of the landsymm_py pipeline) to the
+projected future (Stage 3 output). The harmonization preserves
+global totals in almost all cases while permitting necessary
+regional-scale redistribution.
+
+Pseudocode
+==========
 1) Load PLUMharm options + defaults.
 2) Resolve plumDirs/harmDirs and validate.
 3) Import baseline/reference data.
@@ -9,6 +30,12 @@ Pseudocode:
    - Harmonize areas and management.
    - Enforce conservation checks.
    - Write yearly outputs.
+
+References
+==========
+- Alexander et al. (2018), Glob. Change Biol. 24:2791-2809.
+- Rabin et al. (2020), Earth Syst. Dynam. 11:357-376.
+- Hurtt et al. (2011), Climatic Change 109:117-161 (LUH1).
 """
 
 # TODO:

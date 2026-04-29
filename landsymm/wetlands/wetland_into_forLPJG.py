@@ -1,11 +1,33 @@
 """Insert GLWD3 wetland/peatland into scenario forLPJG landcover.txt files.
 
-Applies the same Approach H logic as wetland_into_hilda.py, but operates on
-the harmonized PLUMharm2LPJG output landcover.txt files found in each
-scenario's forLPJG directory.
+Why this module exists (OPTIONAL stage)
+=======================================
+This is the scenario-side companion of ``wetland_into_hilda.py`` and
+belongs to **Stage 4 of the landsymm_py pipeline, which is optional**.
+Run it only if your downstream LPJ-GUESS runs need an explicit
+PEATLAND land-cover class — typically because you are running coupled
+LPJ-GUESS ↔ IMOGEN climate simulations where peatland CH₄ emissions
+feed back into the IMOGEN climate model alongside CO₂ and N₂O.
 
-For each scenario, produces a new file 'landcover_peatland.txt' alongside the
-original 'landcover.txt', with a PEATLAND column carved from NATURAL.
+If your downstream LPJ-GUESS runs use prescribed (offline) climate
+forcing and do not need explicit peatland CH₄ accounting, you can
+skip this stage — the Stage-3 PLUMharm2LPJG output landcover.txt
+files are already complete LPJ-GUESS-ready scenario inputs.
+
+What this module does
+=====================
+Applies the same Approach H logic as ``wetland_into_hilda.py`` but
+operates on the harmonized PLUMharm2LPJG output ``landcover.txt`` files
+found in each scenario's forLPJG directory. For each scenario, produces
+a new file ``landcover_peatland.txt`` alongside the original
+``landcover.txt``, with a PEATLAND column carved from NATURAL. The
+``_peatland`` suffix keeps peatland and non-peatland scenario LU files
+separate so a single project can support both kinds of LPJ-GUESS runs
+side by side.
+
+The min-over-years approach guarantees that PEATLAND is bounded by the
+minimum natural-vegetation availability across all years in the
+scenario, so it never exceeds available NATURAL fraction at any year.
 
 Approach H (recap):
   1. For each gridcell (Lon, Lat), find the minimum NATURAL fraction across

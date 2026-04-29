@@ -1,6 +1,149 @@
 # LandSyMM Land-Use Pipeline — Technical Manual
 
-**System**: HILDA+ Smoothing/Upscaling → Remapping → PLUM Harmonization → LPJ-GUESS Inputs → Wetland/Peatland Integration
+**System**: HILDA+ Smoothing/Upscaling → Remapping → PLUM Harmonization → LPJ-GUESS Inputs → (Optional) Wetland/Peatland Integration
+
+---
+
+## 0. Scientific Context — Why This Pipeline Exists
+
+This Python codebase is the **land-use data-preparation arm** of the
+**Land System Modular Model (LandSyMM)** framework. LandSyMM couples
+the LPJ-GUESS dynamic global vegetation model with the Parsimonious
+Land Use Model (PLUM/PLUMv2) to study how the global agriculture and
+food system might adapt to climate change, atmospheric CO₂ change, and
+socioeconomic change, and what the consequences are for ecosystem
+services such as carbon storage, runoff, biodiversity, and nitrogen
+pollution. The framework is described in two foundational publications:
+
+| Paper | DOI | Role |
+|-------|-----|------|
+| Alexander et al. (2018), *Global Change Biology* 24:2791–2809 | [10.1111/gcb.14110](https://doi.org/10.1111/gcb.14110) | Introduces LPJ-GUESS ↔ PLUMv2 coupling; defines the factorial potential-yield approach |
+| Rabin et al. (2020), *Earth System Dynamics* 11:357–376 | [10.5194/esd-11-357-2020](https://doi.org/10.5194/esd-11-357-2020) | Names "LandSyMM" as the coupled framework; describes the harmonization routine; analyzes ecosystem-service indicator impacts |
+
+### 0.1 The LandSyMM Workflow
+
+The full workflow alternates LPJ-GUESS and PLUM runs. This Python pipeline
+produces the gridded land-use, fertilizer, and irrigation files that
+LPJ-GUESS reads at multiple steps:
+
+```
+                ┌──────────────────────────────┐
+                │ Stages 1 + 2 of THIS pipeline│
+                │ (HILDA+ → half-degree LU)    │
+                └──────────────┬───────────────┘
+                               │ historical LU baseline
+                               ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │ Step 1: Historical LPJ-GUESS spin-up (steady-state)         │
+   │ Step 2: Yield-generating LPJ-GUESS runs in POTENTIAL-YIELD  │
+   │         factorial mode — 6 management treatments per crop   │
+   │         (3 fertilizer rates × 2 irrigation regimes)         │
+   └─────────────────────────────┬───────────────────────────────┘
+                                 │ per-crop yield surfaces
+                                 ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │ Step 3: PLUM/PLUMv2 economic optimization                   │
+   │   uses LPJ-GUESS yields + GDP/population scenarios          │
+   │   produces raw LU/fert/irrig trajectories per SSP-RCP       │
+   └─────────────────────────────┬───────────────────────────────┘
+                                 │ raw PLUM scenario outputs
+                                 ▼
+                ┌──────────────────────────────┐
+                │ Stage 3 of THIS pipeline     │
+                │ (PLUM harmonization)         │
+                └──────────────┬───────────────┘
+                               │ harmonized scenario LU
+                               ▼
+                ┌──────────────────────────────┐
+                │ Stage 4 (OPTIONAL)           │
+                │ (peatland insertion for      │
+                │  IMOGEN-coupled runs)        │
+                └──────────────┬───────────────┘
+                               │ final LU files
+                               ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │ Step 4: Final LPJ-GUESS run with prescribed PLUM trajectory │
+   │   produces ecosystem service indicators (C storage,         │
+   │   runoff, biodiversity proxies, N pollution) over the       │
+   │   21st century                                               │
+   └─────────────────────────────────────────────────────────────┘
+```
+
+### 0.2 Per-Stage Scientific Motivation
+
+**Stage 1 (HILDA+ smoothing & upscaling) and Stage 2 (Remapping):** LPJ-GUESS
+needs a spatially complete, temporally consistent half-degree historical
+land-use trajectory in its specific class definitions (cropland, pasture,
+natural, barren). HILDA+ provides observation-based land-cover fractions
+at 1 km resolution (Winkler et al., 2021). Smoothing eliminates spurious
+inter-annual flicker; upscaling aggregates to half degree; remapping
+collapses HILDA+'s many cover classes into LPJ-GUESS's four LU classes.
+Crop-specific fractions from MIRCA2000 (Portmann et al., 2010) and
+nitrogen-fertilizer rates from AgGRID (Zhang et al., 2017) are reconciled
+onto the same grid so that historical cropland is broken down by crop
+type and fertilization intensity in a way that LPJ-GUESS can consume.
+
+**Stage 3 (PLUM harmonization):** Quoting Rabin et al. (2020, Sect. 2.3):
+
+> "The PLUM outputs must be processed first, because at the beginning of
+> the future period they do not exactly match the land use and management
+> forcings used at the end of the historical period. Feeding the raw PLUM
+> outputs directly into LPJ-GUESS — causing large areas of sudden
+> agricultural abandonment and expansion between 2010 and 2011 — would
+> thus complicate interpretation of the results, especially of carbon
+> cycling. We developed a harmonization routine, based on that published
+> for Land Use Harmonization v1 dataset (LUH1) (Hurtt et al., 2011),
+> that adjusts the PLUM outputs to ensure a smooth transition from the
+> historical period to the future. While global totals are conserved in
+> almost all cases, harmonization can produce notable differences at the
+> regional scale."
+
+In short, harmonization is the necessary bridge between the
+observation-derived baseline (Stage 2 output) and the model-projected
+future (PLUM scenario outputs). Without it, the historical-to-future
+discontinuity at the boundary year would induce spurious carbon-cycle
+artifacts in LandSyMM analyses.
+
+**Stage 4 (Wetland/peatland integration — OPTIONAL):** This stage exists
+specifically to support **coupled LPJ-GUESS ↔ IMOGEN simulations** in
+which peatland CH₄ emissions feed back into the IMOGEN
+intermediate-complexity climate model alongside CO₂ and N₂O, and that
+modified climate then drives subsequent LPJ-GUESS ecosystem responses.
+GLWD3 wetland fractions (Lehner & Döll, 2004) are aggregated to half
+degree and inserted as a distinct PEATLAND land-cover class — carved
+from NATURAL — in both the Stage-2 historical baseline and each
+Stage-3 scenario landcover output. **If you are not running coupled
+LPJ-GUESS ↔ IMOGEN simulations and do not need explicit peatland
+CH₄ accounting, you can skip Stage 4 entirely.** Stage 2 and Stage 3
+outputs are self-sufficient for vegetation/crop runs without peatland.
+
+### 0.3 What This Pipeline Produces, and What Consumes It
+
+The final outputs are LPJ-GUESS-format text files (one row per gridcell
+per year):
+
+| File | Stage | Consumed by LPJ-GUESS via |
+|------|-------|-------------------------|
+| `LU.*.txt` (historical) and `landcover.txt` (per scenario) | 2 / 3 | `file_lu` parameter |
+| `cropfracs.*.txt` (historical) and `cropfractions.txt` (per scenario) | 2 / 3 | `file_lucrop` parameter |
+| `nfert.*.txt` (historical) and `nfert.txt` (per scenario) | 2 / 3 | `file_Nfert` parameter |
+| `irrig.txt` (per scenario) | 3 | `file_irrigintens` parameter |
+| `LU.*_peatland.txt`, `landcover_peatland.txt` | 4 (optional) | `file_lu` (when `run_peatland 1`) |
+
+The companion repository that consumes these files is the
+**LPJ-GUESS Integrated (LandSyMM + LTS)** codebase, which merges the
+LandSyMM fork modifications back into the LPJ-GUESS Latest Stable
+Release. Available at:
+
+- KIT GitLab: `https://gitlab.imk-ifu.kit.edu/bampoh-d/lpj-guess-integrated-landsymm`
+- Helmholtz GitLab: `https://codebase.helmholtz.cloud/daniel.bampoh/lpj-guess-integrated-landsymm`
+- GitHub: `https://github.com/dbampoh/LPJ-GUESS-integrated-LandSyMM`
+
+When `landsymm_py` outputs are paired with that integrated LTS — built
+at LPJ-GUESS 4.1 commit `a4575b9bd8cf86636a522154baebf29fac8ab422` from
+Lund University's `trunk` branch — and the integrated LTS is run with
+its `iflandsymm_*` runtime parameters enabled, the result reproduces the
+LandSyMM fork's behavior end-to-end.
 
 ---
 
@@ -446,14 +589,28 @@ numpy, scipy, h5py, netCDF4, matplotlib, pandas, openpyxl, rasterio (optional), 
 
 ---
 
-## 6. Stage 4: Wetland/Peatland Integration
+## 6. Stage 4: Wetland/Peatland Integration *(Optional)*
 
 **Codebase**: `landsymm.wetlands/`
 **R originals**: `wetlands_to_hilda/glwd3_to_halfdeg.R`, `wetlands_to_hilda/glwd3_wetland_into_luh2.R`
 
+> **When to run this stage:** Only when you need explicit peatland
+> representation in your downstream LPJ-GUESS runs. This is typically
+> required for **coupled LPJ-GUESS ↔ IMOGEN climate simulations**, where
+> peatland CH₄ emissions feed back into the IMOGEN intermediate-complexity
+> climate model alongside CO₂ and N₂O, and that modified climate then
+> drives subsequent LPJ-GUESS ecosystem responses. If your downstream
+> LPJ-GUESS runs use prescribed (offline) climate forcing and do not need
+> explicit peatland CH₄ accounting, you can skip Stage 4 entirely — the
+> Stage 2 / Stage 3 outputs are self-sufficient.
+
 ### Purpose
 
-Integrates GLWD3 (Global Lakes and Wetlands Database, Level 3) wetland/peatland cover fractions into the land-use datasets produced by Stages 2 and 3. Creates a new **PEATLAND** land cover type carved from the **NATURAL** category, producing peatland-inclusive versions of both the HILDA+ remap LU baseline file and each scenario's forLPJG landcover.txt.
+Integrates GLWD3 (Global Lakes and Wetlands Database, Level 3, Lehner & Döll, 2004) wetland/peatland cover fractions into the land-use datasets produced by Stages 2 and 3. Creates a new **PEATLAND** land cover type carved from the **NATURAL** category, producing peatland-inclusive versions of both the HILDA+ remap LU baseline file and each scenario's forLPJG landcover.txt. The peatland-inclusive files have a `_peatland` suffix to keep them separate from the non-peatland baseline so a single project can support both peatland and non-peatland LPJ-GUESS runs side by side.
+
+### Scientific Rationale
+
+In LandSyMM's coupled LPJ-GUESS ↔ IMOGEN simulations (Rabin et al., 2020), peatlands are treated as a distinct land-cover class with their own freeze–thaw soil physics, water-table dynamics, and three CH₄ transport pathways (diffusion, ebullition, plant-mediated transport via aerenchyma) following Wania et al. (2009, 2010). For LPJ-GUESS to simulate these processes, the prescribed land-use forcing must contain a PEATLAND fraction at every grid cell where peatland exists. HILDA+ does not distinguish peatland from other natural vegetation, so this stage carves PEATLAND out of NATURAL using GLWD3 as the source of peatland extent.
 
 ### Pipeline
 

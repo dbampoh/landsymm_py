@@ -1,6 +1,29 @@
-"""Main driver for remapping pipeline (stub).
+"""Main driver for remapping pipeline (Stage 2).
 
-Pseudocode:
+Why this module exists
+======================
+LPJ-GUESS needs a spatially complete, temporally consistent half-degree
+historical land-use trajectory in its specific class definitions
+(cropland, pasture, natural, barren). This module builds that
+trajectory by reconciling three heterogeneous observation-based data
+sources onto a common half-degree grid:
+
+- **HILDA+ remap** (Stage 1 output): annual half-degree fractions of
+  cropland/pasture/natural/barren from satellite-derived land-cover
+  observations (Winkler et al., 2021).
+- **MIRCA2000** (Portmann et al., 2010): per-crop (rainfed and
+  irrigated) harvested-area fractions, providing the breakdown of
+  cropland by crop type.
+- **AgGRID** (Zhang et al., 2017): per-crop nitrogen fertilizer
+  application rates.
+
+The output is the historical land-use baseline that (a) drives the
+yield-generating LPJ-GUESS spin-up runs in the LandSyMM workflow
+(Rabin et al., 2020, Sect. 2.3, Step 1) and (b) anchors the PLUM
+harmonization in Stage 3 of this pipeline.
+
+Pseudocode
+==========
 1) Load config (remap_options).
 2) Setup output dirs + logging.
 3) Read output gridlist.

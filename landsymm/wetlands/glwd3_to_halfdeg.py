@@ -1,5 +1,15 @@
 """Aggregate GLWD3 30-arcsec raster to half-degree wetland fractions.
 
+Why this module exists (OPTIONAL stage)
+=======================================
+This is the first step of **Stage 4 of the landsymm_py pipeline, which
+is optional**. Run it only if your downstream LPJ-GUESS runs need an
+explicit PEATLAND land-cover class — typically because you are running
+coupled LPJ-GUESS ↔ IMOGEN climate simulations where peatland CH₄
+emissions feed back into the IMOGEN climate model.
+
+Source: Lehner & Döll (2004), J. Hydrology 296:1-22 (GLWD3).
+
 Python port of glwd3_to_halfdeg.R.
 
 Reads the GLWD3 Level-3 GeoTIFF (12 land-cover classes at ~1 km resolution),

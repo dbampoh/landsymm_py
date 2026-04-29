@@ -1,5 +1,30 @@
 """Insert GLWD3 wetland/peatland fraction into HILDA+ remap land-use data.
 
+Why this module exists (OPTIONAL stage)
+=======================================
+This module belongs to **Stage 4 of the landsymm_py pipeline, which is
+optional**. Run it only if your downstream LPJ-GUESS runs need an
+explicit PEATLAND land-cover class — typically because you are running
+**coupled LPJ-GUESS ↔ IMOGEN climate simulations** in which peatland
+CH₄ emissions feed back into the IMOGEN intermediate-complexity climate
+model alongside CO₂ and N₂O, and that modified climate then drives
+subsequent LPJ-GUESS ecosystem responses (Rabin et al., 2020,
+Earth Syst. Dynam. 11:357-376; Wania et al., 2009, 2010 for the
+peatland CH₄ submodel in LPJ-GUESS).
+
+If your LPJ-GUESS runs use prescribed (offline) climate forcing and
+do not need explicit peatland CH₄ accounting, you can skip this stage —
+the Stage-2 HILDA+ remap output is already a complete, LPJ-GUESS-ready
+historical land-use file.
+
+What this module does
+=====================
+HILDA+ does not distinguish peatland from other natural vegetation, so
+this module carves a PEATLAND fraction out of NATURAL using GLWD3
+(Lehner & Döll, 2004) as the source of peatland extent. The
+companion ``wetland_into_forLPJG.py`` performs the same operation on
+the harmonized PLUM scenario landcover files (Stage 3 outputs).
+
 Python port of glwd3_wetland_into_luh2.R — Approach H only,
 adapted for HILDA+ remap LU format (NATURAL, CROPLAND, PASTURE, BARREN).
 
@@ -12,7 +37,14 @@ Approach H: Time-invariant peatland carved from NATURAL.
   4. CROPLAND, PASTURE, BARREN are unchanged.
   5. Fractions sum to 1.0 at every gridcell and year.
 
-Output is written alongside the original LU file with a distinguishing tag.
+The min-over-years approach guarantees that PEATLAND is bounded by the
+minimum natural-vegetation availability and never exceeds it in any
+year, even under scenarios where natural vegetation declines over time.
+
+Output is written alongside the original LU file with a distinguishing
+``_peatland`` suffix to keep peatland and non-peatland baseline files
+separate so a single project can support both kinds of LPJ-GUESS runs
+side by side.
 """
 from __future__ import annotations
 

@@ -1,4 +1,19 @@
-"""Run the full wetland-into-HILDA pipeline.
+"""Run the full wetland-into-HILDA pipeline (OPTIONAL Stage 4).
+
+Why this stage exists
+=====================
+This pipeline orchestrator runs **Stage 4 of the landsymm_py
+pipeline, which is optional**. Run it only if your downstream
+LPJ-GUESS runs need an explicit PEATLAND land-cover class —
+typically because you are running coupled LPJ-GUESS ↔ IMOGEN
+climate simulations where peatland CH₄ emissions feed back into the
+IMOGEN intermediate-complexity climate model alongside CO₂ and N₂O,
+and that modified climate then drives subsequent LPJ-GUESS ecosystem
+responses (Rabin et al., 2020, Earth Syst. Dynam. 11:357-376).
+
+If your LPJ-GUESS runs use prescribed (offline) climate forcing and
+do not need explicit peatland CH₄ accounting, you can skip this stage —
+the Stage 2 / Stage 3 outputs are self-sufficient.
 
 Step 1: Aggregate GLWD3 30-arcsec raster to half-degree wetland fractions.
 Step 2: Insert GLWD3 wetland/peatland into HILDA+ remap LU data (Approach H).

@@ -1,6 +1,23 @@
-"""Convert harmonized outputs to LPJ-GUESS inputs.
+"""Convert harmonized PLUM outputs to LPJ-GUESS-format input files.
 
-Pseudocode:
+Why this module exists
+======================
+After ``plumharm`` produces year-by-year harmonized scenario outputs
+(typically as .mat files containing 2D maps), LPJ-GUESS needs them in
+its own text-table format with one row per (lon, lat, year) and one
+column per land-cover class / crop / management variable. This module
+performs that conversion, producing the four LPJ-GUESS-ready files
+referenced by the ``file_lu``, ``file_lucrop``, ``file_Nfert``, and
+``file_irrigintens`` parameters in LPJ-GUESS instruction (.ins) files
+for each scenario.
+
+The output of this module is what the LandSyMM ↔ LPJ-GUESS coupling
+described in Alexander et al. (2018) and Rabin et al. (2020) feeds
+into the *final* LPJ-GUESS run that produces ecosystem-service
+indicators over the 21st century.
+
+Pseudocode
+==========
 1) Load PLUMharm + PLUMharm2LPJG options.
 2) Resolve harmDirs/forLPJG_dirs.
 3) For each scenario:
