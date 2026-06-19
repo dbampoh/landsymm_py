@@ -24,7 +24,7 @@ import argparse
 import time
 from pathlib import Path
 
-from landsymm.config import get_project_root
+from landsymm.config import get_geodata_dir, get_remap_baseline_files
 from .glwd3_to_halfdeg import aggregate_glwd3_to_halfdeg
 from .wetland_into_hilda import insert_wetland_approach_h
 
@@ -40,17 +40,12 @@ def main(
 ) -> None:
     t0 = time.perf_counter()
 
-    repo_root = get_project_root()
-    glwd3_dir = glwd3_output_dir or str(repo_root / "data" / "geodata_py" / "glwd3")
+    glwd3_dir = glwd3_output_dir or str(get_geodata_dir() / "glwd3")
 
     if glwd3_path is None:
         glwd3_path = str(Path(glwd3_dir) / "glwd_3.tif")
     if lu_path is None:
-        from landsymm.config import get_remap_output_dir
-        lu_path = str(
-            get_remap_output_dir()
-            / "remaps_v10_old_62892_gL" / "LU.remapv10_old_62892_gL.txt"
-        )
+        lu_path = str(get_remap_baseline_files()["lu"])
 
     wetland_nc = str(Path(glwd3_dir) / "peatland_halfdeg.nc")
 

@@ -11,11 +11,10 @@ then PLUMharm2LPJG.m in the MATLAB/R workflow.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
-from landsymm.config import get_project_root
+from landsymm.config import discover_scenarios, get_member, get_plum_output_dir
 from .reformat_plum_gridded import reformat_all
-from .run_plumharm import main as run_harm, SCENARIOS
+from .run_plumharm import main as run_harm
 from .run_plumharm2lpjg import main as run_2lpjg
 
 
@@ -29,12 +28,12 @@ def main(
     t0 = time.perf_counter()
 
     if parent_dir is None:
-        repo_root = get_project_root()
-        parent_dir = str(repo_root / "data" / "PLUMv2_LU_default_output")
+        parent_dir = str(get_plum_output_dir())
 
+    shown = scenarios or discover_scenarios(parent_dir, get_member()) or "(none found)"
     print("=" * 60)
     print("  PLUM Harmonization Pipeline")
-    print(f"  Scenarios: {scenarios or SCENARIOS}")
+    print(f"  Scenarios: {shown}")
     print(f"  Years: {year1}-{yearN}")
     print(f"  Parent dir: {parent_dir}")
     print("=" * 60)
@@ -67,13 +66,13 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--scenarios", nargs="+", default=None,
-        help=f"Scenarios to run (default: all). Options: {SCENARIOS}",
+        help="Scenarios to run (default: all discovered under the parent dir).",
     )
     parser.add_argument("--year1", type=int, default=2021, help="First year (default: 2021)")
     parser.add_argument("--yearN", type=int, default=2100, help="Last year (default: 2100)")
     parser.add_argument(
         "--parent-dir", default=None,
-        help="Parent directory containing SSP scenario dirs (default: data/PLUMv2_LU_default_output)",
+        help="PLUM scenario parent dir (default: config.get_plum_output_dir()).",
     )
     parser.add_argument(
         "--skip-reformat", action="store_true",

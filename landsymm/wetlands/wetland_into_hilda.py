@@ -304,12 +304,9 @@ def main() -> None:
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
-    from landsymm.config import get_remap_output_dir, get_geodata_dir
+    from landsymm.config import get_remap_baseline_files, get_geodata_dir
 
-    lu_path = args.lu_path or str(
-        get_remap_output_dir()
-        / "remaps_v10_old_62892_gL" / "LU.remapv10_old_62892_gL.txt"
-    )
+    lu_path = args.lu_path or str(get_remap_baseline_files()["lu"])
     wetland_nc = args.wetland_nc or str(
         get_geodata_dir() / "glwd3" / "peatland_halfdeg.nc"
     )

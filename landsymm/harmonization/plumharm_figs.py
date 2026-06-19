@@ -38,7 +38,10 @@ def run_plumharm_figs(cfg: PlumHarmFigsConfig) -> Dict[str, np.ndarray]:
     year_list_orig = [year_list_harm[0] - 1] + year_list_harm
 
     if cfg.year_list_baseline_to_plot is None:
-        year_list_baseline = year_list_harm
+        # Default to the baseline anchor year (base_year), which exists in the historic
+        # baseline LU yearList. The scenario harm years (year_list_harm) do NOT exist in
+        # the historic baseline, so defaulting to them raised "<year> is not in list".
+        year_list_baseline = [cfg.base_year]
     else:
         year_list_baseline = list(cfg.year_list_baseline_to_plot)
 
@@ -921,7 +924,10 @@ def _harm_by_numbers(
 
             for s_idx, _sreg in enumerate(list_super_regs):
                 table_orig, table_orig_rel, land_area_by_reg = _iterate_superreg(
-                    np.sum(plum_orig[:, v_mask, :, r][:, :, yi_orig], axis=1),
+                    # Select run r first (basic indexing) so v_mask is the only advanced
+                    # index; otherwise numpy moves the selected dim to the front (was
+                    # producing a transposed (1, ncells, nyear) array).
+                    np.sum(plum_orig[:, :, :, r][:, v_mask][:, :, yi_orig], axis=1),
                     s_idx,
                     "orig",
                     list_super_regs,
@@ -936,7 +942,7 @@ def _harm_by_numbers(
                     land_area_x,
                 )
                 table_harm, table_harm_rel, _ = _iterate_superreg(
-                    np.sum(plum_harm[:, v_mask, :, r][:, :, yi_harm], axis=1),
+                    np.sum(plum_harm[:, :, :, r][:, v_mask][:, :, yi_harm], axis=1),
                     s_idx,
                     "harm",
                     list_super_regs,
@@ -1330,7 +1336,7 @@ def _plot_mgmt_timeseries(
     plt.figure(figsize=(10, 4))
     for r in range(n_runs):
         if plum_harm is not None and is_crop is not None:
-            crop_area = plum_harm[:, is_crop, :, r]
+            crop_area = plum_harm[:, :, :, r][:, is_crop]  # run-first so is_crop is the only advanced index (avoid axis reordering)
             weighted = harm_xvyr[:, :, :, r] * crop_area
             series = np.nansum(weighted, axis=(0, 1))
             if suffix == "nfert":

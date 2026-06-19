@@ -25,6 +25,8 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
+from landsymm.config import discover_scenarios, get_member
+
 CROP_ORDER = [
     "pasture", "energycrops", "wheat", "oilcropsNFix", "oilcropsOther",
     "maize", "rice", "pulses", "setaside", "starchyRoots", "fruitveg", "sugar",
@@ -221,22 +223,24 @@ def reformat_gridded(data_dir: str, verbose: bool = True) -> None:
     _write_table(lu_out, os.path.join(data_dir, "LandUse.txt"))
 
 
-def reformat_scenario(scenario_dir: str, verbose: bool = True) -> None:
-    """Reformat all years for a single scenario (e.g., SSP1_RCP26)."""
-    s1_dir = os.path.join(scenario_dir, "s1")
-    if not os.path.isdir(s1_dir):
-        raise RuntimeError(f"Directory {s1_dir} does not exist")
+def reformat_scenario(scenario_dir: str, verbose: bool = True, member: str | None = None) -> None:
+    """Reformat all years for a single scenario (e.g., SSP1_RCP26 or BAU)."""
+    if member is None:
+        member = get_member()
+    member_dir = os.path.join(scenario_dir, member)
+    if not os.path.isdir(member_dir):
+        raise RuntimeError(f"Directory {member_dir} does not exist")
 
     year_dirs = sorted([
-        d for d in os.listdir(s1_dir)
-        if os.path.isdir(os.path.join(s1_dir, d)) and re.match(r"^\d{4}$", d)
+        d for d in os.listdir(member_dir)
+        if os.path.isdir(os.path.join(member_dir, d)) and re.match(r"^\d{4}$", d)
     ])
 
     if verbose:
         print(f"Processing {scenario_dir}: {len(year_dirs)} years")
 
     for yr_dir_name in year_dirs:
-        reformat_gridded(os.path.join(s1_dir, yr_dir_name), verbose=verbose)
+        reformat_gridded(os.path.join(member_dir, yr_dir_name), verbose=verbose)
 
 
 def reformat_all(
@@ -246,11 +250,7 @@ def reformat_all(
 ) -> None:
     """Reformat all scenarios under the parent directory."""
     if scenarios is None:
-        all_dirs = sorted([
-            d for d in os.listdir(parent_dir)
-            if os.path.isdir(os.path.join(parent_dir, d))
-            and re.match(r"^SSP[1-5]_RCP\d{2}$", d)
-        ])
+        all_dirs = discover_scenarios(parent_dir)
     else:
         all_dirs = list(scenarios)
 

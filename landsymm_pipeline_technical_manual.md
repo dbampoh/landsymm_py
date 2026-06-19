@@ -564,17 +564,20 @@ Harmonizes PLUM scenario land-use projections (2021-2100) against the historical
 ### Running
 
 ```bash
-# Full pipeline (reformat + harmonization + conversion) — single scenario
-python -m landsymm.harmonization.run_plumharm_pipeline \
-  --parent-dir data/PLUMv2_LU_default_output --scenarios SSP1_RCP26
+# Data location / scenario set come from the LANDSYMM_* env vars (Section 7);
+# scenarios default to all discovered under the PLUM parent dir.
 
-# Full pipeline — all scenarios
-python -m landsymm.harmonization.run_plumharm_pipeline \
-  --parent-dir data/PLUMv2_LU_default_output
+# Full pipeline (reformat + harmonization + conversion) — single scenario
+python -m landsymm.harmonization.run_plumharm_pipeline --scenarios SSP1_RCP26
+
+# Full pipeline — all discovered scenarios
+python -m landsymm.harmonization.run_plumharm_pipeline
+
+# Explicit parent dir (overrides LANDSYMM_PLUM_DIRNAME)
+python -m landsymm.harmonization.run_plumharm_pipeline --parent-dir data/PLUMv2_LU_default_output
 
 # Skip reformatting if already done
-python -m landsymm.harmonization.run_plumharm_pipeline \
-  --parent-dir data/PLUMv2_LU_default_output --skip-reformat
+python -m landsymm.harmonization.run_plumharm_pipeline --skip-reformat
 
 # Individual stages (each also accepts --parent-dir)
 python -m landsymm.harmonization.reformat_plum_gridded \
@@ -802,19 +805,33 @@ Lehner, B. & Döll, P. (2004). Development and validation of a global database o
 
 **Module**: `landsymm/config.py`
 
-All data paths are resolved relative to the project root. Override with the
-`LANDSYMM_DATA_DIR` environment variable to use a custom data location.
+All data paths are resolved relative to the project root by default and can be
+overridden with environment variables (no source edits needed for a new data
+location, baseline, scenario set, or ensemble member):
+
+| Env var | Default | Controls |
+|---|---|---|
+| `LANDSYMM_DATA_DIR` | `<project_root>/data` | data root |
+| `LANDSYMM_GEODATA_DIR` | `<data>/geodata_py` | geodata dir (often elsewhere per machine) |
+| `LANDSYMM_REMAP_DIRNAME` | `output_hildaplus_remap_10b` | remap-baseline dir name |
+| `LANDSYMM_REMAP_VER` | `10_old_62892_gL` | remap version tag (baseline subdir + filenames) |
+| `LANDSYMM_PLUM_DIRNAME` | `PLUMv2_LU_default_output` | PLUM scenario parent dir name |
+| `LANDSYMM_MEMBER` | `s1` | ensemble member / median run |
 
 ### Path Functions
 
-| Function | Default Path |
-|----------|-------------|
-| `get_project_root()` | `landsymm_py/` |
-| `get_data_dir()` | `landsymm_py/data/` |
-| `get_geodata_dir()` | `data/geodata_py/` |
-| `get_hildaplus_output_dir()` | `data/geodata_py/HILDA+/data/output/` |
-| `get_remap_output_dir()` | `data/output_hildaplus_remap_10b/` |
-| `get_plum_output_dir()` | `data/PLUMv2_LU_default_output/` |
+| Function | Default Path | Env override |
+|----------|-------------|---------|
+| `get_project_root()` | `landsymm_py/` | - |
+| `get_data_dir()` | `landsymm_py/data/` | `LANDSYMM_DATA_DIR` |
+| `get_geodata_dir()` | `<data>/geodata_py/` | `LANDSYMM_GEODATA_DIR` |
+| `get_hildaplus_output_dir()` | `<geodata>/HILDA+/data/output/` | - |
+| `get_remap_output_dir()` | `<data>/output_hildaplus_remap_10b/` | `LANDSYMM_REMAP_DIRNAME` |
+| `get_remap_ver()` | `10_old_62892_gL` | `LANDSYMM_REMAP_VER` |
+| `get_remap_baseline_dir()` / `get_remap_baseline_files()` | `<remap>/remaps_v{ver}/...` | (derived) |
+| `get_plum_output_dir()` | `<data>/PLUMv2_LU_default_output/` | `LANDSYMM_PLUM_DIRNAME` |
+| `get_member()` | `s1` | `LANDSYMM_MEMBER` |
+| `harm_dirname(...)` / `discover_scenarios(parent)` | harmonized dir name / scenario auto-discovery | (derived/scan) |
 
 ### Stage 1 → Stage 2 Data Flow
 
@@ -837,6 +854,25 @@ from landsymm.config import get_data_dir, get_geodata_dir, get_hildaplus_output_
 data_path = get_data_dir() / "some_file.nc"
 netfrac = get_hildaplus_output_dir() / "hildaplus_netfrac_1901_2020.txt"
 ```
+
+### 7.1 Data availability and reproducibility (planned: DataLad)
+
+The pipeline's large inputs - the geodata (`geodata_py/`), the PLUM scenario
+outputs, and the remap baseline - live outside the repository and are located per
+machine via the `LANDSYMM_*` environment variables above. This keeps the code
+portable, but each user must currently obtain those datasets and point at them
+manually.
+
+Plan: publish the required datasets as a DataLad dataset (git-annex backed) so any
+user can `datalad install` the superdataset and `datalad get` only the parts they
+need (for example, just the remap baseline plus one scenario), with
+content-addressed provenance and no large files committed to git. The `LANDSYMM_*`
+variables would then point at the installed DataLad dataset path (or a default
+subdataset layout), giving reproducible, on-demand data access without any code
+changes. Candidate layout: a `landsymm-data` superdataset with subdatasets for
+`geodata_py/`, `output_hildaplus_remap_*/`, and each `PLUMv2_LU_*` scenario set,
+each `datalad get`-able independently. (Alternatives if DataLad is not adopted: a
+`pooch`/registry fetch keyed by checksum, or a documented rsync/Zenodo bundle.)
 
 ---
 
@@ -879,6 +915,19 @@ netfrac = get_hildaplus_output_dir() / "hildaplus_netfrac_1901_2020.txt"
 | Irrig | **99.999%+** | 884/106M diffs from bidirectional 1-ULP noise |
 | landcover.txt | **Perfect** | Exact match |
 | cropfractions.txt | **Perfect** | 8 last-digit rounding diffs out of 106M |
+
+### Unit / integration tests (`landsymm/tests/`, pytest)
+
+Run with `pytest landsymm/tests/`:
+
+| Test | Covers |
+|---|---|
+| `test_landcover_config_parity.py` | The YAML HILDA+ -> LPJ-GUESS mapping config reproduces the historical hardcoded mapping (and the legacy/profile variants) byte-identically. |
+| `test_config_paths.py` | The de-hardwired path config: `LANDSYMM_*` env-var resolution, defaults, `get_remap_baseline_files()`, `harm_dirname()`, and `discover_scenarios()`. No external data needed. |
+| `test_figs.py` | PLUMharmFigs integration (runs the diagnostics for one scenario over a small window). Auto-skips when harmonized data is absent; point it at data via the `LANDSYMM_TEST_*` env vars. |
+
+(The `tests_py/` scripts above are the MATLAB<->Python numerical parity harness; the
+`landsymm/tests/` suite is the in-repo pytest unit/integration suite.)
 
 ---
 

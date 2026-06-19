@@ -1,9 +1,16 @@
+import os
 import numpy as np
 from netCDF4 import Dataset
+from pathlib import Path
 from timeit import default_timer as timer
 from sys import argv, version_info
 
-FNAME_DATAFILE = '/home/belda-d/data/hilda_plus/smoothed/hildaplus_smoothed.nc'
+# Legacy v1 reference script (superseded by hildap_tables_netfrac_v3.py + the YAML
+# mapping config). Input path is derived from the repo like v3, instead of the
+# former hardcoded absolute path to another user's home directory.
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_HILDA_DATA = str(_PROJECT_ROOT / 'data' / 'geodata_py' / 'HILDA+' / 'data')
+FNAME_DATAFILE = os.path.join(_HILDA_DATA, 'hildaplus_smoothed.nc')
 DLON_LPJG = 0.5 # LPJ-GUESS resolution in longitude (deg)
 DLAT_LPJG = 0.5 # LPJ-GUESS resolution in latitude (deg)
 

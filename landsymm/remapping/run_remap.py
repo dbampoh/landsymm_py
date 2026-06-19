@@ -1,4 +1,4 @@
-from landsymm.config import get_geodata_dir, get_remap_output_dir
+from landsymm.config import get_geodata_dir, get_remap_output_dir, get_remap_ver
 from landsymm.remapping.remap import run_remap
 from landsymm.remapping.remap_options import RemapConfig
 
@@ -7,6 +7,7 @@ def main() -> None:
     geodata = get_geodata_dir()
     gridlists = geodata / "gridlists"
     soil = geodata / "soil"
+    ver = get_remap_ver()  # remap version tag (LANDSYMM_REMAP_VER); default 10_old_62892_gL
 
     cfg = RemapConfig(
         geodata_dir=str(geodata),
@@ -19,7 +20,7 @@ def main() -> None:
         inpaint_method=4,
         force_all_rainfed=False,
         plum_setaside_frac=0.088,
-        remap_ver="10_old_62892_gL",
+        remap_ver=ver,
         this_ver="WithFruitVeg_sepOil_combSugar",
         file_gridlist_out=str(gridlists / "gridlist_62892.runAEclimOK.txt"),
         file_gridlist_climate=str(
@@ -27,8 +28,8 @@ def main() -> None:
             / "gridlist.remapv10_g2p_isimipclimMask.txt"
         ),
         files_soil=(
-            str(soil / "HWSD_soil_data_on_cropland_v2.2.remapv10_old_62892_gL.txt"),
-            str(soil / "HWSD_soil_data_on_cropland_v2.3.remapv10_old_62892_gL.txt"),
+            str(soil / f"HWSD_soil_data_on_cropland_v2.2.remapv{ver}.txt"),
+            str(soil / f"HWSD_soil_data_on_cropland_v2.3.remapv{ver}.txt"),
             str(soil / "soilmap_center_interpolated.dat"),
         ),
         out_prec=6,

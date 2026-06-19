@@ -95,8 +95,10 @@ def import_ref_data(
         else:
             year_list_baseline_lu_to_plot = list(base["yearList"])
         base["varNames"] = [v for v in base["varNames"] if v not in {"URBAN", "PEATLAND"}]
-        bad_base_yx = np.sum(base["maps_YXvy"], axis=2) == 0
-        bad_base_yx |= np.isnan(np.sum(base["maps_YXvy"], axis=2))
+        # maps_YXvy is (Y,X,var,year); collapse over var AND year to a 2D (Y,X) bad-cell
+        # mask so it can be OR-ed into mask_yx (a cell is bad if bad in any baseline year).
+        _base_sum_yxy = np.sum(base["maps_YXvy"], axis=2)
+        bad_base_yx = np.any((_base_sum_yxy == 0) | np.isnan(_base_sum_yxy), axis=2)
 
     # Rearrange LU names
     print("    Rearrange LU names")

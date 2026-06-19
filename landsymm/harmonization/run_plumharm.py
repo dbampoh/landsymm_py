@@ -1,22 +1,27 @@
 """Standard entrypoint for PLUM harmonization (all scenarios).
 
 Equivalent to running PLUMharm_options.m then PLUMharm.m in MATLAB.
+
+Scenarios default to every scenario directory found under the PLUM parent dir
+(see ``config.discover_scenarios``). Data locations and naming are configurable
+via the ``LANDSYMM_*`` environment variables documented in ``landsymm.config``
+(no source edits needed for a new scenario set or data location).
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from landsymm.config import get_project_root, get_remap_output_dir
+from landsymm.config import (
+    discover_scenarios,
+    get_geodata_dir,
+    get_member,
+    get_plum_output_dir,
+    get_project_root,
+    get_remap_baseline_files,
+    harm_dirname,
+)
 from .plumharm import run_plumharm
 from .plumharm_options import PlumHarmConfig
-
-SCENARIOS = [
-    "SSP1_RCP26",
-    "SSP2_RCP45",
-    "SSP3_RCP70",
-    "SSP4_RCP60",
-    "SSP5_RCP85",
-]
 
 
 def main(
@@ -26,11 +31,18 @@ def main(
     parent_dir: str | None = None,
 ) -> None:
     repo_root = get_project_root()
-    data_dir = Path(parent_dir) if parent_dir else repo_root / "data" / "PLUMv2_LU_default_output"
-    baseline_dir = get_remap_output_dir() / "remaps_v10_old_62892_gL"
+    data_dir = Path(parent_dir) if parent_dir else get_plum_output_dir()
+    member = get_member()
+    baseline = get_remap_baseline_files()
+    harm_sub = harm_dirname(member=member, allow_unveg=True)
 
     if scenarios is None:
-        scenarios = SCENARIOS
+        scenarios = discover_scenarios(data_dir, member)
+    if not scenarios:
+        raise RuntimeError(
+            f"No scenarios found under {data_dir} "
+            f"(expected subdirectories each containing a '{member}' dir)."
+        )
 
     for ssp in scenarios:
         print(f"\n{'='*60}")
@@ -39,14 +51,12 @@ def main(
 
         cfg = PlumHarmConfig(
             this_dir=str(repo_root),
-            geodata_dir=str(repo_root / "data" / "geodata_py"),
-            plum_dirs=[str(data_dir / ssp / "s1")],
-            harm_dirs=[
-                str(data_dir / ssp / f"s1.HILDA+_remap_v10_old_62892_gL.harm.allow_unveg_py")
-            ],
-            remap_lu_file=str(baseline_dir / "LU.remapv10_old_62892_gL.txt"),
-            remap_cropf_file=str(baseline_dir / "cropfracs.remapv10_old_62892_gL.txt"),
-            remap_nfert_file=str(baseline_dir / "nfert.remapv10_old_62892_gL.txt"),
+            geodata_dir=str(get_geodata_dir()),
+            plum_dirs=[str(data_dir / ssp / member)],
+            harm_dirs=[str(data_dir / ssp / harm_sub)],
+            remap_lu_file=str(baseline["lu"]),
+            remap_cropf_file=str(baseline["cropf"]),
+            remap_nfert_file=str(baseline["nfert"]),
             base_year=2020,
             year1=year1,
             yearN=yearN,
@@ -84,16 +94,19 @@ def main(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run PLUMharm for all scenarios.")
+    parser = argparse.ArgumentParser(
+        description="Run PLUMharm (default: all scenarios found under the PLUM parent dir)."
+    )
     parser.add_argument(
         "--scenarios", nargs="+", default=None,
-        help=f"Scenarios to run (default: all). Options: {SCENARIOS}",
+        help="Scenarios to run (default: all discovered under the parent dir).",
     )
     parser.add_argument("--year1", type=int, default=2021, help="First year (default: 2021)")
     parser.add_argument("--yearN", type=int, default=2100, help="Last year (default: 2100)")
     parser.add_argument(
         "--parent-dir", default=None,
-        help="Parent directory containing SSP scenario dirs (default: data/PLUMv2_LU_default_output)",
+        help="PLUM scenario parent dir (default: config.get_plum_output_dir(), "
+             "set via LANDSYMM_DATA_DIR / LANDSYMM_PLUM_DIRNAME).",
     )
     args = parser.parse_args()
 

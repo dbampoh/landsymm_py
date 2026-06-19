@@ -2,22 +2,23 @@
 
 Equivalent to running PLUMharm_options.m + PLUMharm2LPJG_options.m then PLUMharm2LPJG.m
 in MATLAB.
+
+Scenarios default to every scenario directory found under the PLUM parent dir.
+Data locations and naming are configurable via the ``LANDSYMM_*`` environment
+variables documented in ``landsymm.config``.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from landsymm.config import get_project_root
+from landsymm.config import (
+    discover_scenarios,
+    get_member,
+    get_plum_output_dir,
+    harm_dirname,
+)
 from .plumharm2lpjg import run_plumharm2lpjg
 from .plumharm2lpjg_options import PlumHarm2LPJGConfig
-
-SCENARIOS = [
-    "SSP1_RCP26",
-    "SSP2_RCP45",
-    "SSP3_RCP70",
-    "SSP4_RCP60",
-    "SSP5_RCP85",
-]
 
 
 def main(
@@ -26,11 +27,17 @@ def main(
     yearN: int = 2100,
     parent_dir: str | None = None,
 ) -> None:
-    repo_root = get_project_root()
-    data_dir = Path(parent_dir) if parent_dir else repo_root / "data" / "PLUMv2_LU_default_output"
+    data_dir = Path(parent_dir) if parent_dir else get_plum_output_dir()
+    member = get_member()
+    harm_sub = harm_dirname(member=member, allow_unveg=True)
 
     if scenarios is None:
-        scenarios = SCENARIOS
+        scenarios = discover_scenarios(data_dir, member)
+    if not scenarios:
+        raise RuntimeError(
+            f"No scenarios found under {data_dir} "
+            f"(expected subdirectories each containing a '{member}' dir)."
+        )
 
     for ssp in scenarios:
         print(f"\n{'='*60}")
@@ -39,10 +46,8 @@ def main(
 
         cfg = PlumHarm2LPJGConfig(
             this_dir=str(data_dir),
-            plum_dirs=[f"{ssp}/s1"],
-            harm_dirs=[
-                f"{ssp}/s1.HILDA+_remap_v10_old_62892_gL.harm.allow_unveg_py"
-            ],
+            plum_dirs=[f"{ssp}/{member}"],
+            harm_dirs=[f"{ssp}/{harm_sub}"],
             base_year=2020,
             year1=year1,
             yearN=yearN,
@@ -71,16 +76,18 @@ def main(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Run PLUMharm2LPJG for all scenarios.")
+    parser = argparse.ArgumentParser(
+        description="Run PLUMharm2LPJG (default: all scenarios found under the PLUM parent dir)."
+    )
     parser.add_argument(
         "--scenarios", nargs="+", default=None,
-        help=f"Scenarios to run (default: all). Options: {SCENARIOS}",
+        help="Scenarios to run (default: all discovered under the parent dir).",
     )
     parser.add_argument("--year1", type=int, default=2021, help="First year (default: 2021)")
     parser.add_argument("--yearN", type=int, default=2100, help="Last year (default: 2100)")
     parser.add_argument(
         "--parent-dir", default=None,
-        help="Parent directory containing SSP scenario dirs (default: data/PLUMv2_LU_default_output)",
+        help="PLUM scenario parent dir (default: config.get_plum_output_dir()).",
     )
     args = parser.parse_args()
 

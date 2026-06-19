@@ -144,10 +144,16 @@ landsymm_py/
 │   └── PLUMv2_LU_default_output/     # PLUM scenario data + harmonization outputs
 ```
 
-Override the data directory by setting the `LANDSYMM_DATA_DIR` environment variable:
+Data locations and naming are configurable via environment variables (no source
+edits needed for a new data location or scenario set):
 
 ```bash
-export LANDSYMM_DATA_DIR=/path/to/shared/data
+export LANDSYMM_DATA_DIR=/path/to/shared/data        # data root
+export LANDSYMM_GEODATA_DIR=/path/to/geodata_py       # geodata (often elsewhere per machine)
+export LANDSYMM_REMAP_DIRNAME=output_hildaplus_remap_10b   # remap-baseline dir name
+export LANDSYMM_REMAP_VER=10_old_62892_gL             # remap version tag
+export LANDSYMM_PLUM_DIRNAME=PLUMv2_LU_default_output # PLUM scenario parent dir name
+export LANDSYMM_MEMBER=s1                             # ensemble member / median run
 ```
 
 ### Running Each Stage
@@ -250,18 +256,38 @@ Optional (for development):
 pip install -e ".[dev]"   # adds pytest, ruff
 ```
 
+### Tests
+
+```bash
+pytest landsymm/tests/
+```
+
+- `test_landcover_config_parity.py` - HILDA+ -> LPJ-GUESS YAML mapping parity.
+- `test_config_paths.py` - `LANDSYMM_*` env-var / path-config resolution (no data needed).
+- `test_figs.py` - PLUMharmFigs integration (auto-skips without harmonized data;
+  point it at data via `LANDSYMM_TEST_*`).
+
+See `landsymm/tests/README.md` for details.
+
 ## Configuration
 
-Path resolution is centralized in `landsymm/config.py`. Key functions:
+Path resolution is centralized in `landsymm/config.py`. Each function honors the
+environment variables above; the "Returns" column shows the default (no env set).
 
-| Function | Returns |
-|----------|---------|
-| `get_project_root()` | `landsymm_py/` |
-| `get_data_dir()` | `landsymm_py/data/` |
-| `get_geodata_dir()` | `landsymm_py/data/geodata_py/` |
-| `get_hildaplus_output_dir()` | `landsymm_py/data/geodata_py/HILDA+/data/output/` |
-| `get_remap_output_dir()` | `landsymm_py/data/output_hildaplus_remap_10b/` |
-| `get_plum_output_dir()` | `landsymm_py/data/PLUMv2_LU_default_output/` |
+| Function | Returns (default) | Env override |
+|----------|---------|---------|
+| `get_project_root()` | `landsymm_py/` | - |
+| `get_data_dir()` | `landsymm_py/data/` | `LANDSYMM_DATA_DIR` |
+| `get_geodata_dir()` | `<data>/geodata_py/` | `LANDSYMM_GEODATA_DIR` |
+| `get_hildaplus_output_dir()` | `<geodata>/HILDA+/data/output/` | - |
+| `get_remap_output_dir()` | `<data>/output_hildaplus_remap_10b/` | `LANDSYMM_REMAP_DIRNAME` |
+| `get_remap_ver()` | `10_old_62892_gL` | `LANDSYMM_REMAP_VER` |
+| `get_remap_baseline_dir()` | `<remap_output_dir>/remaps_v{ver}/` | (derived) |
+| `get_remap_baseline_files()` | dict of `LU/cropfracs/nfert.remapv{ver}.txt` | (derived) |
+| `get_plum_output_dir()` | `<data>/PLUMv2_LU_default_output/` | `LANDSYMM_PLUM_DIRNAME` |
+| `get_member()` | `s1` | `LANDSYMM_MEMBER` |
+| `harm_dirname(...)` | `{member}.HILDA+_remap_v{ver}.harm.allow_unveg_py` | (derived) |
+| `discover_scenarios(parent)` | scenario dirs (those containing a `{member}` dir) | (scan) |
 
 Usage in any module:
 

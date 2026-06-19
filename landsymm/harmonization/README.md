@@ -20,46 +20,58 @@ The pipeline has three stages, matching the MATLAB workflow:
 
 ## Quick Start
 
+Data locations and naming are resolved by `landsymm.config` and can be set with
+environment variables (no source edits needed; see the Configuration section).
+Scenarios default to every scenario directory found under the PLUM parent dir
+(any subdirectory that contains a `{member}` dir, e.g. `s1/`); pass `--scenarios`
+to restrict.
+
+```bash
+# Point the pipeline at your data / baseline / scenario set via env vars
+export LANDSYMM_DATA_DIR=/path/to/data            # data root
+export LANDSYMM_PLUM_DIRNAME=PLUMv2_LU_NFF_output  # PLUM scenario parent dir name
+export LANDSYMM_REMAP_DIRNAME=output_hildaplus_remap_10b_3_py  # remap baseline dir name
+# (optional) LANDSYMM_GEODATA_DIR, LANDSYMM_REMAP_VER, LANDSYMM_MEMBER
+```
+
 ### Run the full pipeline (reformat + harmonization + conversion)
 
 ```bash
-# All 5 SSP scenarios, years 2021-2100
-python -m landsymm.harmonization.run_plumharm_pipeline \
-  --parent-dir data/PLUMv2_LU_default_output
+# All scenarios discovered under the parent dir, years 2021-2100
+python -m landsymm.harmonization.run_plumharm_pipeline
 
-# Single scenario
-python -m landsymm.harmonization.run_plumharm_pipeline \
-  --parent-dir data/PLUMv2_LU_default_output --scenarios SSP1_RCP26
+# Single scenario, custom year range
+python -m landsymm.harmonization.run_plumharm_pipeline --scenarios BAU --year1 2021 --yearN 2050
 
-# Custom year range
-python -m landsymm.harmonization.run_plumharm_pipeline \
-  --parent-dir data/PLUMv2_LU_default_output --scenarios SSP1_RCP26 --year1 2021 --yearN 2050
+# Explicit parent dir (overrides LANDSYMM_PLUM_DIRNAME)
+python -m landsymm.harmonization.run_plumharm_pipeline --parent-dir /path/to/PLUMv2_LU_NFF_output
 
 # Skip reformatting (if already done)
-python -m landsymm.harmonization.run_plumharm_pipeline \
-  --parent-dir data/PLUMv2_LU_default_output --skip-reformat
+python -m landsymm.harmonization.run_plumharm_pipeline --skip-reformat
 ```
 
 ### Run individual stages
 
 ```bash
 # Harmonization only
-python -m landsymm.harmonization.run_plumharm --scenarios SSP1_RCP26
+python -m landsymm.harmonization.run_plumharm --scenarios BAU
 
 # Conversion to LPJ-GUESS inputs only (requires harmonization outputs)
-python -m landsymm.harmonization.run_plumharm2lpjg --scenarios SSP1_RCP26
+python -m landsymm.harmonization.run_plumharm2lpjg --scenarios BAU
 
 # Diagnostic figures only (requires harmonization outputs)
-python -m landsymm.harmonization.run_plumharm_figs --scenarios SSP1_RCP26
+python -m landsymm.harmonization.run_plumharm_figs --scenarios BAU
 ```
 
-### Available scenarios
+Note: remapping (Stage 1+2, `landsymm.remapping.run_remap`) and the optional
+wetland/peatland step (Stage 4, `landsymm.wetlands.run_wetland_pipeline`) are
+separate entrypoints and are NOT run by this harmonization pipeline.
 
-- `SSP1_RCP26`
-- `SSP2_RCP45`
-- `SSP3_RCP70`
-- `SSP4_RCP60`
-- `SSP5_RCP85`
+### Scenarios
+
+Scenarios are auto-discovered from the PLUM parent dir
+(`config.discover_scenarios`), so any set works (the historical SSP set
+`SSP1_RCP26` ... `SSP5_RCP85`, the NFF set `BAU`, `NfN_NfN`, ..., etc.).
 
 ---
 
@@ -81,13 +93,16 @@ These are produced by `reformat_plum_gridded.py` (or its R predecessor `reformat
 
 ### Baseline reference data
 
-Historical land-use baseline from the remapping pipeline:
+Historical land-use baseline from the remapping pipeline. The directory name is
+set by `LANDSYMM_REMAP_DIRNAME` and the version tag by `LANDSYMM_REMAP_VER`
+(`remaps_v{ver}` subdir, `LU.remapv{ver}.txt` etc.); the helper
+`config.get_remap_baseline_files()` returns these three paths:
 
 ```
-data/output_hildaplus_remap_10b/remaps_v10_old_62892_gL/
-    LU.remapv10_old_62892_gL.txt         # Land-use areas
-    cropfracs.remapv10_old_62892_gL.txt  # Crop fractions
-    nfert.remapv10_old_62892_gL.txt      # Fertilization rates
+<data>/<LANDSYMM_REMAP_DIRNAME>/remaps_v{ver}/
+    LU.remapv{ver}.txt         # Land-use areas
+    cropfracs.remapv{ver}.txt  # Crop fractions
+    nfert.remapv{ver}.txt      # Fertilization rates
 ```
 
 ### Geodata
@@ -240,7 +255,27 @@ See `plumharm_matlab_python_comprehensive_audit.md` in the project root for the 
 
 ## Configuration
 
-All run configuration is set in the `run_*.py` scripts via Python dataclasses. The key parameters (matching MATLAB's `PLUMharm_options.m`) are:
+### Data locations and naming (environment variables)
+
+Resolved by `landsymm.config` so no source edits are needed for a new data
+location or scenario set:
+
+| Env var | Default | Controls |
+|---|---|---|
+| `LANDSYMM_DATA_DIR` | `<project_root>/data` | data root |
+| `LANDSYMM_GEODATA_DIR` | `<data>/geodata_py` | geodata dir (often elsewhere per machine) |
+| `LANDSYMM_REMAP_DIRNAME` | `output_hildaplus_remap_10b` | remap-baseline dir name |
+| `LANDSYMM_REMAP_VER` | `10_old_62892_gL` | remap version tag (baseline subdir + filenames) |
+| `LANDSYMM_PLUM_DIRNAME` | `PLUMv2_LU_default_output` | PLUM scenario parent dir name |
+| `LANDSYMM_MEMBER` | `s1` | ensemble member / median run |
+
+Scenarios default to all discovered under the parent dir; override per run with
+`--scenarios` / `--parent-dir`.
+
+### Numeric / algorithmic options
+
+These (matching MATLAB's `PLUMharm_options.m`) are set in the `run_*.py` scripts
+via Python dataclasses:
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -255,4 +290,6 @@ All run configuration is set in the `run_*.py` scripts via Python dataclasses. T
 | `out_prec` | 6 | Output decimal precision |
 | `someofall` | True | Ensure minimum crop fraction everywhere |
 
-To modify configuration, edit the relevant `run_*.py` script directly.
+To modify these numeric/algorithmic options, edit the relevant `run_*.py` script
+directly. Data locations and the scenario set are controlled by the environment
+variables above (and `--scenarios` / `--parent-dir`), not by source edits.
