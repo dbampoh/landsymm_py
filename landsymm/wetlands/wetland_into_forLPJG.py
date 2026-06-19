@@ -53,11 +53,51 @@ from .wetland_into_hilda import (
 )
 
 
-def _find_scenario_dirs(parent_dir: str) -> list[str]:
+def _find_scenario_dirs(parent_dir: str, member: str | None = None) -> list[str]:
     """Discover scenario forLPJG directories containing landcover.txt."""
-    pattern = os.path.join(parent_dir, "*", "s1.*.forLPJG")
+    from landsymm.config import get_member
+
+    if member is None:
+        member = get_member()
+    pattern = os.path.join(parent_dir, "*", f"{member}.*.forLPJG")
     dirs = sorted(glob.glob(pattern))
     return [d for d in dirs if os.path.isfile(os.path.join(d, "landcover.txt"))]
+
+
+def _resolve_landcover_files(
+    parent_dir: str | None = None,
+    flat_parent: str | None = None,
+    landcover: list[str] | None = None,
+    scenarios: list[str] | None = None,
+) -> list[str]:
+    """Resolve the list of ``landcover.txt`` files to process (first match wins):
+
+    - ``landcover``: explicit ``landcover.txt`` file paths, used as-is.
+    - ``flat_parent``: scan ``<flat_parent>/*/landcover.txt`` (flat layout, e.g.
+      ``Data/lu/<scenario>/landcover.txt``).
+    - ``parent_dir``: default forLPJG scan,
+      ``<parent_dir>/*/<member>.*.forLPJG/landcover.txt``.
+
+    The ``scenarios`` substring filter applies to the scan modes only (not to an
+    explicit ``landcover`` list).
+    """
+    if landcover:
+        files = [os.path.abspath(p) for p in landcover]
+        missing = [p for p in files if not os.path.isfile(p)]
+        if missing:
+            raise FileNotFoundError(
+                "landcover file(s) not found: " + ", ".join(missing)
+            )
+        return files
+    if flat_parent:
+        files = sorted(glob.glob(os.path.join(flat_parent, "*", "landcover.txt")))
+    else:
+        files = [
+            os.path.join(d, "landcover.txt") for d in _find_scenario_dirs(parent_dir)
+        ]
+    if scenarios:
+        files = [f for f in files if any(s in f for s in scenarios)]
+    return files
 
 
 def insert_peatland_into_landcover(
@@ -199,46 +239,59 @@ def main(
     wetland_product: str = "wforests",
     scenarios: list[str] | None = None,
     verbose: bool = True,
+    landcover: list[str] | None = None,
+    flat_parent: str | None = None,
 ) -> None:
-    """Process all scenario forLPJG landcover.txt files."""
-    from landsymm.config import get_plum_output_dir, get_geodata_dir
+    """Insert PEATLAND into scenario landcover.txt file(s).
+
+    By default scans the PLUM parent dir for forLPJG scenario directories. Use
+    ``landcover`` to pass explicit landcover.txt paths, or ``flat_parent`` to scan
+    a flat ``<dir>/<scenario>/landcover.txt`` layout (e.g. a paper ``Data/lu/``).
+    A ``landcover_peatland.txt`` is written alongside each input.
+    """
+    from landsymm.config import get_geodata_dir, get_plum_output_dir
 
     t0_total = time.perf_counter()
 
-    if parent_dir is None:
-        parent_dir = str(get_plum_output_dir())
     if wetland_nc_path is None:
-        wetland_nc_path = str(
-            get_geodata_dir() / "glwd3" / "peatland_halfdeg.nc"
-        )
-
+        wetland_nc_path = str(get_geodata_dir() / "glwd3" / "peatland_halfdeg.nc")
     if not os.path.isfile(wetland_nc_path):
         raise FileNotFoundError(
             f"Wetland NetCDF not found: {wetland_nc_path}\n"
             "Run glwd3_to_halfdeg.py first to generate peatland_halfdeg.nc"
         )
 
-    all_dirs = _find_scenario_dirs(parent_dir)
-    if scenarios:
-        all_dirs = [d for d in all_dirs if any(s in d for s in scenarios)]
+    # Default to the PLUM parent dir only when no explicit files / flat parent given.
+    if landcover is None and flat_parent is None and parent_dir is None:
+        parent_dir = str(get_plum_output_dir())
 
-    if not all_dirs:
-        print(f"No forLPJG directories found under {parent_dir}")
+    if landcover:
+        mode = f"explicit ({len(landcover)} file(s))"
+    elif flat_parent:
+        mode = f"flat scan: {flat_parent}/*/landcover.txt"
+    else:
+        mode = f"forLPJG scan: {parent_dir}"
+
+    files = _resolve_landcover_files(
+        parent_dir=parent_dir, flat_parent=flat_parent,
+        landcover=landcover, scenarios=scenarios,
+    )
+    if not files:
+        print(f"No landcover.txt files found ({mode})")
         return
 
     print("=" * 60)
-    print("  Insert PEATLAND into scenario forLPJG landcover.txt files")
-    print(f"  Parent directory: {parent_dir}")
+    print("  Insert PEATLAND into scenario landcover.txt files")
+    print(f"  Mode: {mode}")
     print(f"  Wetland product: {wetland_product}")
-    print(f"  Found {len(all_dirs)} scenario(s)")
+    print(f"  Found {len(files)} file(s)")
     print("=" * 60)
 
-    for i, fdir in enumerate(all_dirs, 1):
-        scenario = os.path.basename(os.path.dirname(fdir))
-        lc_path = os.path.join(fdir, "landcover.txt")
-        out_path = os.path.join(fdir, "landcover_peatland.txt")
+    for i, lc_path in enumerate(files, 1):
+        out_path = os.path.join(os.path.dirname(lc_path), "landcover_peatland.txt")
+        label = os.path.basename(os.path.dirname(lc_path)) or lc_path
 
-        print(f"\n[{i}/{len(all_dirs)}] {scenario}")
+        print(f"\n[{i}/{len(files)}] {label}")
         insert_peatland_into_landcover(
             lc_path, wetland_nc_path, out_path,
             wetland_product=wetland_product,
@@ -249,7 +302,7 @@ def main(
     minutes = int(elapsed // 60)
     seconds = int(elapsed % 60)
     print(f"\n{'=' * 60}")
-    print(f"  All scenarios processed ({minutes}m {seconds}s)")
+    print(f"  All files processed ({minutes}m {seconds}s)")
     print(f"{'=' * 60}")
 
 
@@ -262,11 +315,21 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--parent-dir", default=None,
-        help="Parent directory containing scenario folders (default: data/PLUMv2_LU_default_output)",
+        help="Parent dir for the default forLPJG scan "
+             "(<parent>/*/<member>.*.forLPJG/landcover.txt; default: config.get_plum_output_dir()).",
+    )
+    parser.add_argument(
+        "--flat-parent", default=None,
+        help="Scan a flat layout instead: <flat-parent>/*/landcover.txt "
+             "(e.g. a paper Data/lu/ directory).",
+    )
+    parser.add_argument(
+        "--landcover", nargs="+", default=None,
+        help="Explicit landcover.txt file path(s) to process (overrides the scans).",
     )
     parser.add_argument(
         "--wetland-nc", default=None,
-        help="Path to peatland_halfdeg.nc (default: data/geodata_py/glwd3/peatland_halfdeg.nc)",
+        help="Path to peatland_halfdeg.nc (default: <geodata>/glwd3/peatland_halfdeg.nc)",
     )
     parser.add_argument(
         "--wetland-product",
@@ -276,7 +339,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--scenarios", nargs="*", default=None,
-        help="Specific scenarios to process (default: all found)",
+        help="Substring filter for the scan modes (ignored with --landcover).",
     )
     parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
@@ -287,4 +350,6 @@ if __name__ == "__main__":
         wetland_product=args.wetland_product,
         scenarios=args.scenarios,
         verbose=not args.quiet,
+        landcover=args.landcover,
+        flat_parent=args.flat_parent,
     )

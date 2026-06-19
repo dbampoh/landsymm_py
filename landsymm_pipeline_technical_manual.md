@@ -757,9 +757,15 @@ python -m landsymm.wetlands.wetland_into_hilda --wetland-product noforests
 python -m landsymm.wetlands.wetland_into_forLPJG \
   --parent-dir data/PLUMv2_LU_default_output
 
-# Step 2b: Specific scenarios only
+# Step 2b: Specific scenarios only (substring filter on the scan)
+python -m landsymm.wetlands.wetland_into_forLPJG --scenarios SSP1_RCP26 SSP3_RCP70
+
+# Step 2b: flat layout (<flat-parent>/*/landcover.txt, e.g. a paper Data/lu/ dir)
+python -m landsymm.wetlands.wetland_into_forLPJG --flat-parent paper_2/Data/lu
+
+# Step 2b: explicit landcover.txt file(s)
 python -m landsymm.wetlands.wetland_into_forLPJG \
-  --parent-dir data/PLUMv2_LU_default_output --scenarios SSP1_RCP26 SSP3_RCP70
+  --landcover paper_2/Data/lu/av/landcover.txt paper_2/Data/lu/bio/landcover.txt
 
 # Full pipeline (Steps 1 + 2a only)
 python -m landsymm.wetlands.run_wetland_pipeline

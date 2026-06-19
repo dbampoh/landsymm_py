@@ -127,29 +127,37 @@ Columns: `Lon Lat Year NATURAL CROPLAND PASTURE PEATLAND BARREN`
 
 Produces peatland-inclusive `landcover_peatland.txt` files alongside the original `landcover.txt` in each scenario's forLPJG directory.
 
+Three input modes are supported (first match wins): the default forLPJG scan, a
+flat-layout scan, or an explicit list of `landcover.txt` files. In every mode a
+`landcover_peatland.txt` is written alongside each input.
+
 ```bash
-# All scenarios
+# (A) Default forLPJG scan: <parent>/*/<member>.*.forLPJG/landcover.txt
 python -m landsymm.wetlands.wetland_into_forLPJG
+python -m landsymm.wetlands.wetland_into_forLPJG --scenarios BAU NfN_NfN     # substring filter
+python -m landsymm.wetlands.wetland_into_forLPJG --parent-dir /path/to/PLUMv2_LU_NFF_output
 
-# Specific scenarios
-python -m landsymm.wetlands.wetland_into_forLPJG --scenarios SSP1_RCP26 SSP2_RCP45
+# (B) Flat layout: <flat-parent>/*/landcover.txt  (e.g. a paper Data/lu/ dir)
+python -m landsymm.wetlands.wetland_into_forLPJG --flat-parent paper_2/Data/lu
 
-# Custom parent directory
+# (C) Explicit file(s)
 python -m landsymm.wetlands.wetland_into_forLPJG \
-  --parent-dir data/PLUMv2_LU_default_output
+  --landcover paper_2/Data/lu/av/landcover.txt paper_2/Data/lu/bio/landcover.txt
 ```
 
 **Options:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--parent-dir` | `data/PLUMv2_LU_default_output` | Parent directory with scenario folders |
-| `--wetland-nc` | `data/geodata_py/glwd3/peatland_halfdeg.nc` | Path to peatland NetCDF |
+| `--parent-dir` | `config.get_plum_output_dir()` | Parent dir for the default forLPJG scan (`<parent>/*/<member>.*.forLPJG/`) |
+| `--flat-parent` | - | Scan a flat layout instead: `<flat-parent>/*/landcover.txt` |
+| `--landcover` | - | Explicit `landcover.txt` path(s) to process (overrides the scans) |
+| `--wetland-nc` | `<geodata>/glwd3/peatland_halfdeg.nc` | Path to peatland NetCDF |
 | `--wetland-product` | `wforests` | `wforests` or `noforests` |
-| `--scenarios` | all | Specific scenarios to process |
+| `--scenarios` | all | Substring filter for the scan modes (ignored with `--landcover`) |
 | `--quiet` | off | Suppress progress messages |
 
-**Output:** `data/PLUMv2_LU_default_output/{SSP}/s1.*.forLPJG/landcover_peatland.txt`
+**Output:** `landcover_peatland.txt` alongside each input `landcover.txt`.
 
 Columns: `Lon Lat Year PASTURE CROPLAND NATURAL PEATLAND BARREN`
 
